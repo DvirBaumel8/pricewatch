@@ -1,6 +1,25 @@
 #!/usr/bin/env node
 "use strict";
 
+/**
+ * PriceWatch unified discovery CLI.
+ *
+ * Lab path  (§7.2): API /price.json + DOM data-attributes → monitor-compatible skill
+ * Real-site path (§7.5): site-specific HTTP+DOM extractors → detailed skill
+ *
+ * Routing: if the URL is a known real site (or HTTPS to a non-localhost host
+ * without a /price.json endpoint), the §7.5 ladder runs. Otherwise the lab
+ * path runs, preserving full backward compatibility with monitor.js and
+ * scripts/run-7.2.sh.
+ *
+ * Usage:
+ *   node src/discover.js <url> "<target_description>"
+ *
+ * Examples:
+ *   node src/discover.js http://127.0.0.1:3847 "main monthly price"
+ *   node src/discover.js https://plausible.io/ "Starter plan monthly USD ~10k pageviews"
+ */
+
 const http = require("http");
 const https = require("https");
 const fs = require("fs");
@@ -9,15 +28,7 @@ const crypto = require("crypto");
 
 const SKILLS_DIR = path.resolve(__dirname, "..", "data", "skills");
 
-function usage() {
-  console.error(
-    "Usage: node src/discover.js <base_url> <target_price_description>"
-  );
-  console.error(
-    '  e.g. node src/discover.js http://127.0.0.1:3847 "main monthly price"'
-  );
-  process.exit(1);
-}
+// ─── Shared helpers ─────────────────────────────────────────────────────────
 
 function httpGet(url, timeoutMs) {
   return new Promise((resolve, reject) => {
@@ -35,13 +46,16 @@ function httpGet(url, timeoutMs) {
   });
 }
 
-function skillId(baseUrl, target) {
-  const hash = crypto
+// ═══════════════════════════════════════════════════════════════════════════
+//  LAB PATH — backward-compatible with monitor.js and run-7.2.sh
+// ═══════════════════════════════════════════════════════════════════════════
+
+function labSkillId(baseUrl, target) {
+  return crypto
     .createHash("sha256")
     .update(`${baseUrl}|${target}`)
     .digest("hex")
     .slice(0, 12);
-  return hash;
 }
 
 function normalizePrice(raw) {
@@ -112,19 +126,12 @@ async function tryDomDiscovery(baseUrl) {
   };
 }
 
-async function main() {
-  const args = process.argv.slice(2);
-  if (args.length < 2) usage();
-
-  const baseUrl = args[0];
-  const targetDesc = args.slice(1).join(" ");
-
+async function runLabDiscovery(baseUrl, targetDesc) {
   console.log(`Discovering price at ${baseUrl} for target: "${targetDesc}"`);
 
   let result = null;
   let step = null;
 
-  // Step 1: API (0 LLM tokens, ≤10s, 1 page load)
   console.log("  Step 1: trying API path /price.json ...");
   try {
     result = await tryApiDiscovery(baseUrl);
@@ -133,7 +140,6 @@ async function main() {
     console.log(`  Step 1 failed: ${e.message}`);
   }
 
-  // Step 2: DOM (0 LLM tokens, ≤15s, 1 page load)
   if (!result) {
     console.log("  Step 2: trying DOM with data attributes ...");
     try {
@@ -149,7 +155,7 @@ async function main() {
     process.exit(2);
   }
 
-  const id = skillId(baseUrl, targetDesc);
+  const id = labSkillId(baseUrl, targetDesc);
   const skill = {
     id,
     version: 1,
@@ -181,6 +187,148 @@ async function main() {
   console.log(`  Price: $${result.extracted.amount}/${result.extracted.period}`);
   console.log(`  Skill written: ${skillPath}`);
   console.log(`  Skill ID: ${id}`);
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  REAL-SITE PATH — §7.5 discovery ladder with site-specific extractors
+// ═══════════════════════════════════════════════════════════════════════════
+
+const { runStep0 } = require("./steps/step0-reuse");
+const { runStep2 } = require("./steps/step2-http-dom");
+const { saveSkill } = require("./skill-store");
+
+const REAL_SITE_STEPS = [
+  { id: 0, name: "reuse-skill", maxMs: 5000,  maxPages: 0, fn: runStep0 },
+  { id: 2, name: "http-dom",    maxMs: 15000, maxPages: 1, fn: runStep2 },
+];
+
+async function runRealSiteDiscovery(url, target) {
+  console.log(`\n=== PriceWatch Discovery ===`);
+  console.log(`URL:    ${url}`);
+  console.log(`Target: ${target}\n`);
+
+  const result = {
+    url,
+    target,
+    success: false,
+    step: null,
+    method: null,
+    extracted: null,
+    skillPath: null,
+    llmTokens: 0,
+    error: null,
+    wallMs: 0,
+  };
+
+  const t0 = Date.now();
+
+  for (const step of REAL_SITE_STEPS) {
+    console.log(`[step ${step.id}] ${step.name} — trying…`);
+    const stepStart = Date.now();
+    try {
+      const out = await Promise.race([
+        step.fn({ url, target }),
+        new Promise((_, rej) =>
+          setTimeout(() => rej(new Error("timeout")), step.maxMs)
+        ),
+      ]);
+      const elapsed = Date.now() - stepStart;
+      console.log(`[step ${step.id}] elapsed ${elapsed}ms — ${out ? "hit" : "miss"}`);
+
+      if (out && out.price !== undefined) {
+        result.success = true;
+        result.step = step.id;
+        result.method = step.name;
+        result.extracted = out;
+        result.llmTokens = out.llmTokens || 0;
+        result.wallMs = Date.now() - t0;
+
+        const skillPath = saveSkill({
+          url,
+          target,
+          method: step.name === "http-dom" ? "dom" : out.method || step.name,
+          step: step.id,
+          price: out.price,
+          currency: out.currency || "USD",
+          period: out.period || "month",
+          perUnit: out.perUnit || null,
+          selector: out.selector || null,
+          regex: out.regex || null,
+          jsonPath: out.jsonPath || null,
+          confidence: out.confidence || "high",
+          site: out.site || new URL(url).hostname.replace(/^www\./, ""),
+          planName: out.planName || null,
+          notes: out.notes || null,
+        });
+        result.skillPath = skillPath;
+        console.log(`[success] step ${step.id} → skill saved: ${skillPath}`);
+        break;
+      }
+    } catch (err) {
+      console.log(`[step ${step.id}] error: ${err.message}`);
+      if (err.message === "blocked") {
+        result.error = "blocked";
+        break;
+      }
+    }
+  }
+
+  if (!result.success && !result.error) {
+    result.error = "all_steps_exhausted";
+  }
+  result.wallMs = Date.now() - t0;
+
+  console.log("\n--- Result ---");
+  console.log(JSON.stringify(result, null, 2));
+
+  if (!result.success) {
+    process.exit(1);
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  Router — pick lab vs real-site path
+// ═══════════════════════════════════════════════════════════════════════════
+
+function isLabUrl(url) {
+  try {
+    const u = new URL(url);
+    const host = u.hostname;
+    return (
+      host === "localhost" ||
+      host === "127.0.0.1" ||
+      host === "0.0.0.0" ||
+      host.endsWith(".local") ||
+      u.protocol === "http:" && /^(\d+\.){3}\d+$/.test(host)
+    );
+  } catch {
+    return true;
+  }
+}
+
+async function main() {
+  const args = process.argv.slice(2);
+  if (args.length < 2) {
+    console.error(
+      "Usage: node src/discover.js <url> <target_price_description>"
+    );
+    console.error(
+      '  Lab:  node src/discover.js http://127.0.0.1:3847 "main monthly price"'
+    );
+    console.error(
+      '  Real: node src/discover.js https://plausible.io/ "Starter plan monthly USD ~10k pageviews"'
+    );
+    process.exit(1);
+  }
+
+  const url = args[0];
+  const target = args.slice(1).join(" ");
+
+  if (isLabUrl(url)) {
+    await runLabDiscovery(url, target);
+  } else {
+    await runRealSiteDiscovery(url, target);
+  }
 }
 
 main().catch((err) => {

@@ -1,0 +1,25 @@
+{
+  "name": "workspace",
+  "version": "1.0.0",
+  "description": "Competitor pricing monitor MVP.",
+  "main": "src/discover.js",
+  "bin": {
+    "discover": "src/discover.js"
+  },
+  "scripts": {
+    "discover": "node src/discover.js",
+    "lab": "node lab/server.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/DvirBaumel8/pricewatch.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/DvirBaumel8/pricewatch/issues"
+  },
+  "homepage": "https://github.com/DvirBaumel8/pricewatch#readme"
+}
