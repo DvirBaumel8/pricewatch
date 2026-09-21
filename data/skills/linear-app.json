@@ -1,0 +1,21 @@
+{
+  "id": "linear-app-ee93dab8",
+  "version": 1,
+  "created_at": "2026-09-21T23:26:09.378Z",
+  "pricing_url": "https://linear.app/pricing",
+  "target_price_description": "Basic plan per user monthly USD",
+  "site": "linear.app",
+  "plan_name": "Basic",
+  "method": "dom",
+  "step": 2,
+  "price": 10,
+  "currency": "USD",
+  "period": "month",
+  "per_unit": "user",
+  "selector": "#basic [class*=\"visuallyHidden\"], #basic [aria-label*=\"per user/month\"]",
+  "regex": "id=\"basic\".*?\\$(\\d+)\\s+per\\s+user/month",
+  "json_path": null,
+  "confidence": "high",
+  "failure_count": 0,
+  "notes": "Extracted from visually-hidden span near #basic section; page says 'Billed yearly'"
+}
