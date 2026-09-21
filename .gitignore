@@ -3,8 +3,6 @@ node_modules/
 *.log
 outbox/
 data/snapshots.local.json
-data/skills/*.json
 data/snapshots/*.json
-!data/skills/.gitkeep
 !data/snapshots/.gitkeep
 lab/price.json.bak

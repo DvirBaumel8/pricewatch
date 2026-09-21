@@ -66,6 +66,166 @@ const extractors = {
     },
   },
 
+  "vercel.com": {
+    extract(html, target) {
+      // Vercel SSR embeds a planPrices JSON block in the RSC payload with
+      // escaped quotes:  \"planPrices\":{\"pro\":{\"amount\":\"$$20\",\"suffix\":\"/mo.\"}}
+      // The heading renders near a "Popular" badge:
+      //   Popular</span>…<span class="text-heading-…">$20</span><span…>/mo.</span>
+      // Feature table row: "Developer seat" → "$$20 / month"
+
+      let price = null;
+      let notes = "";
+
+      const jsonMatch = html.match(
+        /\\?"planPrices\\?"[\s\S]{0,300}?\\?"pro\\?"\s*:\s*\{[^}]*?\\?"amount\\?"\s*:\s*\\?"\$\$(\d+)\\?"/
+      );
+      if (jsonMatch) {
+        price = Number(jsonMatch[1]);
+        notes = `Embedded RSC JSON: pro.amount=$$${price}`;
+      }
+
+      const headingMatch = html.match(
+        /Popular<\/span>[\s\S]{0,500}?text-heading-\d+[^>]*>\$(\d+)<\/span><span[^>]*>\/mo\./
+      );
+      if (headingMatch) {
+        const domPrice = Number(headingMatch[1]);
+        if (price === null) {
+          price = domPrice;
+          notes = `DOM heading (Pro/Popular section): $${domPrice}/mo.`;
+        } else if (domPrice === price) {
+          notes += "; confirmed by DOM heading near Popular badge";
+        }
+      }
+
+      const seatMatch = html.match(
+        /\\?"Developer seat\\?"[\s\S]{0,400}?\\?"proTitle\\?"\s*:\s*\\?"\$\$(\d+)\s*\/\s*month\\?"/
+      );
+      if (seatMatch) {
+        const seatPrice = Number(seatMatch[1]);
+        if (price !== null && seatPrice === price) {
+          notes += `; Developer seat row confirms $${seatPrice}/month`;
+        }
+      }
+
+      if (price === null) return null;
+
+      return {
+        price,
+        currency: "USD",
+        period: "month",
+        perUnit: "developer seat",
+        planName: "Pro",
+        site: "vercel.com",
+        selector: '.text-heading-32 (near Popular badge)',
+        regex: 'planPrices.*?pro.*?amount.*?\\$\\$(\\d+)',
+        jsonPath: 'planPrices.pro.amount',
+        confidence: "high",
+        notes,
+      };
+    },
+  },
+
+  "slack.com": {
+    extract(html, target) {
+      // Slack SSR renders plan cards with class "plan-type--pro".
+      // Inside the Pro card, the standard monthly price is in a
+      // <span class="v--strikeprice">$8.75</span> (struck through for promo).
+      // The promo price is in <span class="plan-emphasized-rate">$4.38…</span>.
+      // The term text: "per user / month, when paying monthly"
+      //
+      // We extract the strikeprice (standard monthly), NOT the promo.
+
+      const proIdx = html.indexOf('plan-type--pro');
+      if (proIdx === -1) return null;
+      const chunk = html.slice(proIdx, proIdx + 3000);
+
+      const strikeMatch = chunk.match(/v--strikeprice">\$(\d+(?:\.\d{1,2})?)</);
+      if (!strikeMatch) return null;
+
+      const standardPrice = Number(strikeMatch[1]);
+
+      const promoMatch = chunk.match(/plan-emphasized-rate">\$(\d+(?:\.\d{1,2})?)/);
+      const promoPrice = promoMatch ? Number(promoMatch[1]) : null;
+
+      const termMatch = chunk.match(/term-copy[^>]*>([^<]+)</);
+      const termText = termMatch ? termMatch[1].trim() : "";
+
+      let notes = `Standard monthly: $${standardPrice}`;
+      if (promoPrice !== null) {
+        notes += `; promo: $${promoPrice} (ignored — 50% off limited-time offer)`;
+      }
+      if (termText) notes += `; term: "${termText}"`;
+
+      return {
+        price: standardPrice,
+        currency: "USD",
+        period: "month",
+        perUnit: "active user",
+        planName: "Pro",
+        site: "slack.com",
+        selector: '.plan-type--pro .v--strikeprice',
+        regex: 'plan-type--pro[\\s\\S]{0,1500}v--strikeprice">\\$(\\d+\\.\\d{2})',
+        confidence: "high",
+        notes,
+      };
+    },
+  },
+
+  "shopify.com": {
+    extract(html, target) {
+      // Shopify SSR renders pricing cards with a flex layout.
+      // The Basic card: <p>Basic</p><p> <!-- -->$29<small class="text-xs">/mo</small></p>
+      // Promo trap: "$1/month for 3 months" appears elsewhere on the page.
+      // The comparison table also has "Pay monthly" → "$39 USD/mo" (full monthly)
+      // and "Pay yearly" → "$29 USD/mo" (annual rate).
+      // The main card shows $29/mo (the standard annual-billing rate).
+
+      const cardMatch = html.match(
+        /text-t7"><p>Basic<\/p><p>\s*(?:<!--[^>]*-->)?\s*\$(\d+)<small[^>]*>\/mo<\/small>/
+      );
+      if (!cardMatch) return null;
+
+      const cardPrice = Number(cardMatch[1]);
+
+      let notes = `Card heading: Basic $${cardPrice}/mo`;
+
+      const yearlyMatch = html.match(
+        /Pay yearly[\s\S]{0,200}?\$(\d+)\s+USD\/mo/
+      );
+      if (yearlyMatch) {
+        const yearlyPrice = Number(yearlyMatch[1]);
+        if (yearlyPrice === cardPrice) {
+          notes += `; yearly row confirms $${yearlyPrice} USD/mo`;
+        }
+      }
+
+      const monthlyMatch = html.match(
+        /Pay monthly[\s\S]{0,200}?\$(\d+)\s+USD\/mo/
+      );
+      if (monthlyMatch) {
+        notes += `; pay-monthly rate: $${monthlyMatch[1]} USD/mo (higher, ignored)`;
+      }
+
+      if (html.includes("$1/month for 3 months") || html.includes("$1 per month")) {
+        notes += "; $1/mo intro promo present on page (ignored)";
+      }
+
+      return {
+        price: cardPrice,
+        currency: "USD",
+        period: "month",
+        perUnit: null,
+        planName: "Basic",
+        site: "shopify.com",
+        selector: '.text-t7 p:first-child + p',
+        regex: 'text-t7"><p>Basic</p><p>[^$]*\\$(\\d+)<small[^>]*>/mo',
+        confidence: "high",
+        notes,
+      };
+    },
+  },
+
   "notion.com": {
     extract(html, target) {
       // Notion embeds structured pricing JSON in the page.
