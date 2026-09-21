@@ -9,7 +9,8 @@
   "scripts": {
     "discover": "node src/discover.js",
     "lab": "node lab/server.js",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "node test/test-slack-extractor.js && node test/test-blocked-detection.js",
+    "test:offline": "bash scripts/test-7.2-offline.sh"
   },
   "repository": {
     "type": "git",

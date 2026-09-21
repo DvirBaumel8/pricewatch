@@ -27,6 +27,7 @@ const path = require("path");
 const crypto = require("crypto");
 
 const SKILLS_DIR = path.resolve(__dirname, "..", "data", "skills");
+const { looksBlocked } = require("./steps/http-fetch");
 
 // ─── Shared helpers ─────────────────────────────────────────────────────────
 
@@ -73,6 +74,11 @@ async function tryApiDiscovery(baseUrl) {
   const res = await httpGet(url, 10_000);
   if (res.status !== 200) return null;
 
+  const blocked = looksBlocked(res.status, res.body);
+  if (blocked) {
+    throw new Error(`blocked: ${blocked}`);
+  }
+
   let json;
   try {
     json = JSON.parse(res.body);
@@ -98,6 +104,11 @@ async function tryDomDiscovery(baseUrl) {
   const url = baseUrl.replace(/\/+$/, "") + "/";
   const res = await httpGet(url, 15_000);
   if (res.status !== 200) return null;
+
+  const blocked = looksBlocked(res.status, res.body);
+  if (blocked) {
+    throw new Error(`blocked: ${blocked}`);
+  }
 
   const amountMatch = res.body.match(/data-amount="([^"]+)"/);
   const currencyMatch = res.body.match(/data-currency="([^"]+)"/);
@@ -127,30 +138,37 @@ async function tryDomDiscovery(baseUrl) {
 }
 
 async function runLabDiscovery(baseUrl, targetDesc) {
+  const t0 = Date.now();
   console.log(`Discovering price at ${baseUrl} for target: "${targetDesc}"`);
 
   let result = null;
   let step = null;
 
   console.log("  Step 1: trying API path /price.json ...");
+  const step1Start = Date.now();
   try {
     result = await tryApiDiscovery(baseUrl);
     if (result) step = 1;
   } catch (e) {
     console.log(`  Step 1 failed: ${e.message}`);
   }
+  console.log(`TELEMETRY ${JSON.stringify({ op: "discover", step: 1, ms: Date.now() - step1Start, hit: !!result })}`);
 
   if (!result) {
     console.log("  Step 2: trying DOM with data attributes ...");
+    const step2Start = Date.now();
     try {
       result = await tryDomDiscovery(baseUrl);
       if (result) step = 2;
     } catch (e) {
       console.log(`  Step 2 failed: ${e.message}`);
     }
+    console.log(`TELEMETRY ${JSON.stringify({ op: "discover", step: 2, ms: Date.now() - step2Start, hit: !!result })}`);
   }
 
   if (!result) {
+    const wallMs = Date.now() - t0;
+    console.log(`TELEMETRY ${JSON.stringify({ op: "discover", status: "fail", wallMs })}`);
     console.error("Discovery failed: could not extract price via API or DOM.");
     process.exit(2);
   }
@@ -183,10 +201,12 @@ async function runLabDiscovery(baseUrl, targetDesc) {
   const skillPath = path.join(SKILLS_DIR, `${id}.json`);
   fs.writeFileSync(skillPath, JSON.stringify(skill, null, 2) + "\n");
 
+  const wallMs = Date.now() - t0;
   console.log(`  Step ${step} succeeded (method: ${result.method})`);
   console.log(`  Price: $${result.extracted.amount}/${result.extracted.period}`);
   console.log(`  Skill written: ${skillPath}`);
   console.log(`  Skill ID: ${id}`);
+  console.log(`TELEMETRY ${JSON.stringify({ op: "discover", status: "ok", step, method: result.method, wallMs })}`);
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -234,6 +254,7 @@ async function runRealSiteDiscovery(url, target) {
       ]);
       const elapsed = Date.now() - stepStart;
       console.log(`[step ${step.id}] elapsed ${elapsed}ms — ${out ? "hit" : "miss"}`);
+      console.log(`TELEMETRY ${JSON.stringify({ op: "discover", step: step.id, ms: elapsed, hit: !!(out && out.price !== undefined) })}`);
 
       if (out && out.price !== undefined) {
         result.success = true;
@@ -266,6 +287,7 @@ async function runRealSiteDiscovery(url, target) {
       }
     } catch (err) {
       console.log(`[step ${step.id}] error: ${err.message}`);
+      console.log(`TELEMETRY ${JSON.stringify({ op: "discover", step: step.id, ms: Date.now() - stepStart, hit: false, error: err.message })}`);
       if (err.message === "blocked") {
         result.error = "blocked";
         break;
@@ -280,6 +302,7 @@ async function runRealSiteDiscovery(url, target) {
 
   console.log("\n--- Result ---");
   console.log(JSON.stringify(result, null, 2));
+  console.log(`TELEMETRY ${JSON.stringify({ op: "discover", status: result.success ? "ok" : "fail", step: result.step, method: result.method, wallMs: result.wallMs, error: result.error })}`);
 
   if (!result.success) {
     process.exit(1);
