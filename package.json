@@ -9,7 +9,12 @@
   "scripts": {
     "discover": "node src/discover.js",
     "lab": "node lab/server.js",
-    "test": "node test/test-slack-extractor.js && node test/test-blocked-detection.js",
+    "service-a": "node src/service-a.js",
+    "service-b": "node scripts/run-onboarding-worker.js",
+    "service-b:watch": "node scripts/run-onboarding-worker.js --watch",
+    "test": "node test/test-queue.js && node test/test-slack-extractor.js && node test/test-blocked-detection.js",
+    "test:queue": "node test/test-queue.js",
+    "test:e2e": "node test/test-service-ab.js",
     "test:offline": "bash scripts/test-7.2-offline.sh"
   },
   "repository": {
