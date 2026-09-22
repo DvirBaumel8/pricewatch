@@ -131,7 +131,15 @@ function writePriceChangeEmail(skill, before, after, customerInfo) {
   const emailPath = path.join(OUTBOX_DIR, filename);
 
   const name = friendlyName(skill);
+  const target = skill.target_price_description;
   const now = new Date();
+
+  let changeLine;
+  if (!target || name === target) {
+    changeLine = `We detected a price change for ${target || name}.`;
+  } else {
+    changeLine = `We detected a price change for ${target} on ${name}.`;
+  }
 
   const email = {
     type: "price_change",
@@ -140,7 +148,7 @@ function writePriceChangeEmail(skill, before, after, customerInfo) {
     customer_email: customerInfo ? customerInfo.customerEmail : null,
     customer_name: customerInfo ? customerInfo.customerName : null,
     base_url: skill.base_url || skill.pricing_url,
-    target: skill.target_price_description,
+    target,
     timestamp: now.toISOString(),
     before: {
       amount: before.amount,
@@ -158,7 +166,7 @@ function writePriceChangeEmail(skill, before, after, customerInfo) {
     body: [
       `Hi${customerInfo && customerInfo.customerName ? ` ${customerInfo.customerName}` : ""},`,
       "",
-      `We detected a price change for ${skill.target_price_description} at ${name}.`,
+      changeLine,
       "",
       `  Before: ${formatDisplay(before)}`,
       `  After:  ${formatDisplay(after)}`,

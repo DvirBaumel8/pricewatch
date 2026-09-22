@@ -141,9 +141,17 @@ test("Body: before/after amounts on clear lines", () => {
   assert(email.body.includes("After:  $49/mo"), "missing after line");
 });
 
-test("Body: uses target description, not 'Lab demo site'", () => {
+test("Body: no repeated phrase — lab uses 'for {target}.' not 'at {name}'", () => {
   assert(email.body.includes("main monthly price"), "missing target description");
   assert(!email.body.includes("Lab demo"), "contains 'Lab demo'");
+  assert(
+    email.body.includes("a price change for main monthly price."),
+    "should end with period, no 'at' clause"
+  );
+  assert(
+    !email.body.includes("at main monthly price"),
+    "should NOT repeat name when name == target"
+  );
 });
 
 test("Body: friendly link with no URL for lab", () => {
@@ -195,6 +203,13 @@ test("HARD: real subject contains NO localhost/127.0.0.1", () => {
 
 test("HARD: real body contains NO localhost/127.0.0.1", () => {
   assert(!LOCAL_RE.test(realEmail.body), "body has raw lab URL");
+});
+
+test("Real body: 'for {target} on {site}' prose", () => {
+  assert(
+    realEmail.body.includes("a price change for Starter plan monthly USD on plausible.io."),
+    "should use 'for target on site' pattern"
+  );
 });
 
 test("Real body: 'Open pricing page:' link", () => {
