@@ -88,15 +88,48 @@ function formatDisplay(price) {
   return `$${price.amount}/${price.period === "month" ? "mo" : price.period}`;
 }
 
-/**
- * Write a customer-facing price_change email to the outbox.
- * Extends the existing outbox format with customer id/email stub.
- */
+function friendlyName(skill) {
+  if (skill.site) return skill.site;
+  const url = skill.base_url || skill.pricing_url || "";
+  if (/^https?:\/\/(localhost|127\.0\.0\.1)(:|\/|$)/.test(url)) {
+    return "Lab demo site";
+  }
+  try {
+    return new URL(url).hostname;
+  } catch {
+    return skill.target_price_description || "Unknown site";
+  }
+}
+
+function friendlyPricingLink(skill) {
+  const url = skill.pricing_url || skill.base_url || "";
+  if (/^https?:\/\/(localhost|127\.0\.0\.1)(:|\/|$)/.test(url)) {
+    return `Lab demo pricing page\n${url}`;
+  }
+  return `Open pricing page: ${url}`;
+}
+
+function formatJerusalemTime(date) {
+  const d = date || new Date();
+  return d.toLocaleString("en-GB", {
+    timeZone: "Asia/Jerusalem",
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    timeZoneName: "short",
+  });
+}
+
 function writePriceChangeEmail(skill, before, after, customerInfo) {
   fs.mkdirSync(OUTBOX_DIR, { recursive: true });
   const ts = new Date().toISOString().replace(/[:.]/g, "-");
   const filename = `price-change_${skill.id}_${ts}.json`;
   const emailPath = path.join(OUTBOX_DIR, filename);
+
+  const name = friendlyName(skill);
+  const now = new Date();
 
   const email = {
     type: "price_change",
@@ -106,7 +139,7 @@ function writePriceChangeEmail(skill, before, after, customerInfo) {
     customer_name: customerInfo ? customerInfo.customerName : null,
     base_url: skill.base_url || skill.pricing_url,
     target: skill.target_price_description,
-    timestamp: new Date().toISOString(),
+    timestamp: now.toISOString(),
     before: {
       amount: before.amount,
       currency: before.currency,
@@ -119,14 +152,20 @@ function writePriceChangeEmail(skill, before, after, customerInfo) {
       period: after.period,
       display: formatDisplay(after),
     },
-    subject: `Price changed: ${skill.target_price_description} at ${skill.base_url || skill.pricing_url}`,
+    subject: `PriceWatch: ${name} price changed`,
     body: [
-      `The ${skill.target_price_description} at ${skill.base_url || skill.pricing_url} has changed.`,
+      `Hi${customerInfo && customerInfo.customerName ? ` ${customerInfo.customerName}` : ""},`,
+      "",
+      `We detected a price change for ${skill.target_price_description} at ${name}.`,
       "",
       `  Before: ${formatDisplay(before)}`,
       `  After:  ${formatDisplay(after)}`,
       "",
-      `Detected at ${new Date().toISOString()}.`,
+      friendlyPricingLink(skill),
+      "",
+      `Detected ${formatJerusalemTime(now)}.`,
+      "",
+      "— PriceWatch",
     ].join("\n"),
   };
 
@@ -287,6 +326,9 @@ module.exports = {
   loadLatestSnapshot,
   saveSnapshot,
   priceChanged,
+  friendlyName,
+  formatJerusalemTime,
+  formatDisplay,
   SKILLS_DIR,
   SNAPSHOTS_DIR,
   OUTBOX_DIR,

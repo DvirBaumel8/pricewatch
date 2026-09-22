@@ -82,11 +82,21 @@ function saveSnapshot(skillId, price) {
   return snapshotFile;
 }
 
+function friendlyName(skill) {
+  if (skill.site) return skill.site;
+  const url = skill.base_url || skill.pricing_url || "";
+  if (/^https?:\/\/(localhost|127\.0\.0\.1)(:|\/|$)/.test(url)) return "Lab demo site";
+  try { return new URL(url).hostname; } catch { return skill.target_price_description || "Unknown site"; }
+}
+
 function writeEmail(skill, before, after) {
   fs.mkdirSync(OUTBOX_DIR, { recursive: true });
   const ts = new Date().toISOString().replace(/[:.]/g, "-");
   const filename = `price-change_${skill.id}_${ts}.json`;
   const emailPath = path.join(OUTBOX_DIR, filename);
+
+  const name = friendlyName(skill);
+  const display = (p) => `$${p.amount}/${p.period === "month" ? "mo" : p.period}`;
 
   const email = {
     type: "price_change",
@@ -98,22 +108,24 @@ function writeEmail(skill, before, after) {
       amount: before.amount,
       currency: before.currency,
       period: before.period,
-      display: `$${before.amount}/${before.period === "month" ? "mo" : before.period}`,
+      display: display(before),
     },
     after: {
       amount: after.amount,
       currency: after.currency,
       period: after.period,
-      display: `$${after.amount}/${after.period === "month" ? "mo" : after.period}`,
+      display: display(after),
     },
-    subject: `Price changed: ${skill.target_price_description} at ${skill.base_url}`,
+    subject: `PriceWatch: ${name} price changed`,
     body: [
-      `The ${skill.target_price_description} at ${skill.base_url} has changed.`,
+      `We detected a price change for ${skill.target_price_description} at ${name}.`,
       "",
-      `  Before: $${before.amount}/${before.period === "month" ? "mo" : before.period}`,
-      `  After:  $${after.amount}/${after.period === "month" ? "mo" : after.period}`,
+      `  Before: ${display(before)}`,
+      `  After:  ${display(after)}`,
       "",
       `Detected at ${new Date().toISOString()}.`,
+      "",
+      "— PriceWatch",
     ].join("\n"),
   };
 
