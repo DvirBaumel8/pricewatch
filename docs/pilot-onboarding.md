@@ -86,30 +86,43 @@ bash scripts/cron-daily-monitor.sh
 # → partner should receive email within seconds
 ```
 
-## 5b. gmail-mcp drain (when SMTP_PASS / RESEND_API_KEY are absent)
+## 5b. gmail-mcp drain (preferred §8.1 path — no secrets needed)
 
-When `send-outbox.js` exits 7 (no credentials), use a Cursor agent with the
-Gmail MCP connected to `price.watcher.service@gmail.com`:
+When `send-outbox.js` exits 7 (no SMTP_PASS / RESEND_API_KEY), a Cursor
+agent with the **Gmail MCP** connected to `price.watcher.service@gmail.com`
+drains the outbox instead.
+
+**Locked test address:** `PRICEWATCH_TEST_EMAIL=dvirbaumel9@gmail.com`
+
+### Agent workflow
+
+1. **List unsent files** (no network — pure filesystem):
 
 ```bash
-# 1. List unsent outbox files (no network, pure filesystem)
 node scripts/list-unsent-outbox.js
-# → one JSON line per file: { file, to, subject, body }
+```
 
-# 2. Agent calls Gmail MCP send_message for each line:
-#      to:      entry.to   (customer_email or PRICEWATCH_TEST_EMAIL)
-#      subject: entry.subject
-#      body:    entry.body
-#    From = the OAuth-authenticated Gmail (price.watcher.service@gmail.com).
+Prints one JSON line per unsent `outbox/*.json`:
 
-# 3. After each successful send, mark the file:
+```json
+{"file":"price-change_lab_2026-09-22T15-00-00-000Z.json","to":"dvirbaumel9@gmail.com","subject":"Price changed: main monthly price at …","body":"The main monthly price at …\n\n  Before: $29/mo\n  After:  $49/mo\n…"}
+```
+
+2. **Agent sends each entry** via Gmail MCP `send_message`:
+   - **From:** `price.watcher.service@gmail.com` (the OAuth-authenticated account)
+   - **To:** `entry.to` (customer email — or `dvirbaumel9@gmail.com` for lab tests)
+   - **Subject:** `entry.subject`
+   - **Body:** `entry.body`
+
+3. **Mark sent** after each successful MCP send:
+
+```bash
 node scripts/mark-outbox-sent.js <entry.file> gmail-mcp
 ```
 
-Outbox JSON is kept as audit trail. The `.sent` sidecar is the same format
-used by SMTP/Resend, so idempotency works across all three transports.
-
-This is the **preferred §8.1 path** when SMTP secret injection is broken.
+This writes the `.sent` sidecar — same format as SMTP/Resend, so
+idempotency works across all three transports. Outbox JSON is kept as
+audit trail.
 
 ## 6. Confirm inbox delivery
 

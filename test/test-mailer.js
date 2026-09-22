@@ -21,7 +21,7 @@
  *   node test/test-mailer.js                  # mock mode
  *   RESEND_API_KEY=re_xxx \
  *     PRICEWATCH_MAIL_FROM='PriceWatch <onboarding@resend.dev>' \
- *     PRICEWATCH_TEST_EMAIL=ceo@example.com \
+ *     PRICEWATCH_TEST_EMAIL=dvirbaumel9@gmail.com \
  *     node test/test-mailer.js                # real-send via Resend
  *   npm run test:e2e:mailer
  */
@@ -34,7 +34,7 @@ const fs = require("fs");
 const SERVICE_A = process.env.SERVICE_A_URL || "http://127.0.0.1:3850";
 const LAB_URL = process.env.LAB_URL || "http://127.0.0.1:3847";
 const PROJECT_ROOT = path.join(__dirname, "..");
-const TEST_EMAIL = process.env.PRICEWATCH_TEST_EMAIL || "test@example.com";
+const TEST_EMAIL = process.env.PRICEWATCH_TEST_EMAIL || "dvirbaumel9@gmail.com";
 const HAS_CREDS = !!(process.env.PRICEWATCH_SMTP_PASS || process.env.RESEND_API_KEY);
 
 function httpRequest(method, url, body) {
@@ -364,7 +364,7 @@ async function main() {
     console.log("    For real-send acceptance (CEO) via Resend:");
     console.log("      RESEND_API_KEY=re_xxx \\");
     console.log("        PRICEWATCH_MAIL_FROM='PriceWatch <onboarding@resend.dev>' \\");
-    console.log("        PRICEWATCH_TEST_EMAIL=ceo@example.com \\");
+    console.log("        PRICEWATCH_TEST_EMAIL=dvirbaumel9@gmail.com \\");
     console.log("        npm run test:e2e:mailer");
   }
   console.log("");
