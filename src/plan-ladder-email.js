@@ -37,12 +37,29 @@ function formatFieldValue(field, value) {
   return String(value);
 }
 
+function formatPrice(p) {
+  if (p === null || p === undefined) return "Custom";
+  return `$${p}`;
+}
+
 function buildChangeTable(changes) {
   const lines = [];
   lines.push("  Plan            | Field    | Before     | After");
   lines.push("  --------------- | -------- | ---------- | ----------");
   for (const c of changes) {
     const plan = (c.plan || "—").padEnd(15);
+
+    if (c.type === "plan_added") {
+      const price = formatPrice(c.newPrice);
+      lines.push(`  ${plan} | ${"added".padEnd(8)} | ${"—".padEnd(10)} | ${price.padEnd(10)}`);
+      continue;
+    }
+    if (c.type === "plan_removed") {
+      const price = formatPrice(c.oldPrice);
+      lines.push(`  ${plan} | ${"removed".padEnd(8)} | ${price.padEnd(10)} | ${"—".padEnd(10)}`);
+      continue;
+    }
+
     const field = (c.field || "—").padEnd(8);
     const old = formatFieldValue(c.field, c.old).padEnd(10);
     const nw = formatFieldValue(c.field, c.new).padEnd(10);
@@ -64,10 +81,18 @@ function buildSummaryLine(changes) {
   const added = changes.filter(c => c.type === "plan_added");
   const removed = changes.filter(c => c.type === "plan_removed");
   if (added.length > 0 && removed.length === 0) {
-    return `New plan${added.length > 1 ? "s" : ""} detected: ${added.map(c => c.plan).join(", ")}.`;
+    const descs = added.map(c => {
+      const price = c.newPrice !== null && c.newPrice !== undefined ? ` at $${c.newPrice}` : "";
+      return `${c.plan}${price}`;
+    });
+    return `New plan${added.length > 1 ? "s" : ""} detected: ${descs.join(", ")}.`;
   }
   if (removed.length > 0 && added.length === 0) {
-    return `Plan${removed.length > 1 ? "s" : ""} removed: ${removed.map(c => c.plan).join(", ")}.`;
+    const descs = removed.map(c => {
+      const price = c.oldPrice !== null && c.oldPrice !== undefined ? ` ($${c.oldPrice})` : "";
+      return `${c.plan}${price}`;
+    });
+    return `Plan${removed.length > 1 ? "s" : ""} removed: ${descs.join(", ")}.`;
   }
   return `${changes.length} pricing change${changes.length > 1 ? "s" : ""} detected.`;
 }

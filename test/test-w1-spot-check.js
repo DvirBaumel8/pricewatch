@@ -2,21 +2,28 @@
 "use strict";
 
 /**
- * W1 spot-check — verify extracted plan-ladder snapshots match known prices.
+ * W1 spot-check — verify plan-ladder extraction correctness.
+ *
+ * Two modes:
+ *   1. If live snapshots exist in data/snapshots/ladder/, verify those.
+ *   2. Otherwise fall back to committed golden fixtures in
+ *      test/fixtures/wedge/golden-ladders/ (works on fresh clone).
  *
  * Expected values as of September 2026 (public pricing pages).
- * Test passes if ≥4/5 sites have correct main plans.
+ * Passes if ≥4/5 sites have correct main plans.
  */
 
 const fs = require("fs");
 const path = require("path");
 
 const LADDER_DIR = path.resolve(__dirname, "..", "data", "snapshots", "ladder");
+const GOLDEN_DIR = path.resolve(__dirname, "fixtures", "wedge", "golden-ladders");
 
 let passed = 0;
 let failed = 0;
 let correct = 0;
 let total = 0;
+let source = "unknown";
 
 function assert(cond, msg) {
   if (!cond) throw new Error(`Assertion failed: ${msg}`);
@@ -37,9 +44,21 @@ function test(name, fn) {
 }
 
 function loadSnapshot(site) {
-  const fpath = path.join(LADDER_DIR, `${site.replace(/\./g, "-")}.json`);
-  if (!fs.existsSync(fpath)) return null;
-  return JSON.parse(fs.readFileSync(fpath, "utf8"));
+  const slugged = site.replace(/\./g, "-");
+
+  const livePath = path.join(LADDER_DIR, `${slugged}.json`);
+  if (fs.existsSync(livePath)) {
+    source = "live";
+    return JSON.parse(fs.readFileSync(livePath, "utf8"));
+  }
+
+  const goldenPath = path.join(GOLDEN_DIR, `${slugged}.json`);
+  if (fs.existsSync(goldenPath)) {
+    source = "golden";
+    return JSON.parse(fs.readFileSync(goldenPath, "utf8"));
+  }
+
+  return null;
 }
 
 function findPlan(plans, name) {
@@ -47,6 +66,13 @@ function findPlan(plans, name) {
 }
 
 console.log("\n=== W1 spot-check: plan-ladder correctness ===\n");
+
+const firstSnap = loadSnapshot("vercel.com");
+if (!firstSnap) {
+  console.log("  No snapshots found (live or golden). Run: npm run ladder:allowlist\n");
+  process.exit(1);
+}
+console.log(`  Source: ${source === "live" ? "data/snapshots/ladder/ (live)" : "test/fixtures/wedge/golden-ladders/ (committed)"}\n`);
 
 test("Vercel: Hobby=Free, Pro=$20/developer seat, Enterprise=Custom", () => {
   const snap = loadSnapshot("vercel.com");
@@ -61,7 +87,7 @@ test("Vercel: Hobby=Free, Pro=$20/developer seat, Enterprise=Custom", () => {
   assert(ent && ent.price === null, `Enterprise price: ${ent ? ent.price : "missing"}`);
 });
 
-test("Linear: Free=0, Basic=$10/user, Business≈$16/user, Enterprise=Custom", () => {
+test("Linear: Free=0, Basic=$10/user, Enterprise=Custom", () => {
   const snap = loadSnapshot("linear.app");
   assert(snap, "no snapshot");
   assert(snap.plans.length >= 3, `plans: ${snap.plans.length}`);
@@ -72,7 +98,7 @@ test("Linear: Free=0, Basic=$10/user, Business≈$16/user, Enterprise=Custom", (
   assert(basic.unit === "user", `Basic unit: ${basic.unit}`);
 });
 
-test("Notion: Free=0, Plus=$10/member, Business≈$20/member", () => {
+test("Notion: Free=0, Plus=$10/member", () => {
   const snap = loadSnapshot("notion.com");
   assert(snap, "no snapshot");
   assert(snap.plans.length >= 3, `plans: ${snap.plans.length}`);
@@ -102,7 +128,7 @@ test("Slack: Free=0, Pro=$8.75/active user", () => {
   assert(pro.unit === "active user", `Pro unit: ${pro.unit}`);
 });
 
-test("Shopify: Basic=$29, Grow=$79, Advanced=$299, Plus=$2300", () => {
+test("Shopify: Basic=$29, Grow=$79, Advanced=$299", () => {
   const snap = loadSnapshot("shopify.com");
   assert(snap, "no snapshot");
   assert(snap.plans.length >= 3, `plans: ${snap.plans.length}`);

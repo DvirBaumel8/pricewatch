@@ -1,0 +1,34 @@
+{
+  "site": "linear.app",
+  "checked_at": "2026-09-22T18:14:32.996Z",
+  "plans": [
+    {
+      "plan": "Free",
+      "price": 0,
+      "currency": "USD",
+      "unit": "user",
+      "billing": "free"
+    },
+    {
+      "plan": "Basic",
+      "price": 10,
+      "currency": "USD",
+      "unit": "user",
+      "billing": "monthly"
+    },
+    {
+      "plan": "Business",
+      "price": 16,
+      "currency": "USD",
+      "unit": "user",
+      "billing": "monthly"
+    },
+    {
+      "plan": "Enterprise",
+      "price": null,
+      "currency": "USD",
+      "unit": "user",
+      "billing": "custom"
+    }
+  ]
+}

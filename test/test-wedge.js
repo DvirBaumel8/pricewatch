@@ -288,11 +288,28 @@ test("buildSummaryLine: multiple price changes", () => {
   assert(summary.includes("2 plan prices"), "should mention count");
 });
 
-test("buildSummaryLine: plan added", () => {
-  const added = [{ plan: "Pro", field: "plan", old: null, new: "Pro", type: "plan_added" }];
+test("buildSummaryLine: plan added with price", () => {
+  const added = [{ plan: "Pro", field: "plan", old: null, new: "Pro", type: "plan_added", newPrice: 20 }];
   const summary = buildSummaryLine(added);
   assert(summary.includes("New plan"), "should say 'New plan'");
   assert(summary.includes("Pro"), "should name the plan");
+  assert(summary.includes("$20"), "should include price");
+});
+
+test("buildChangeTable: plan added shows price in After column", () => {
+  const added = [{ plan: "Business", field: "plan", old: null, new: "Business", type: "plan_added", newPrice: 20 }];
+  const table = buildChangeTable(added);
+  assert(table.includes("Business"), "missing plan name");
+  assert(table.includes("added"), "missing 'added' field");
+  assert(table.includes("$20"), "missing price in After column");
+});
+
+test("buildChangeTable: plan removed shows price in Before column", () => {
+  const removed = [{ plan: "Starter", field: "plan", old: "Starter", new: null, type: "plan_removed", oldPrice: 9 }];
+  const table = buildChangeTable(removed);
+  assert(table.includes("Starter"), "missing plan name");
+  assert(table.includes("removed"), "missing 'removed' field");
+  assert(table.includes("$9"), "missing price in Before column");
 });
 
 cleanup();

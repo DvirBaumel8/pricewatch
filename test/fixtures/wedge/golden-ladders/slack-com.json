@@ -1,0 +1,27 @@
+{
+  "site": "slack.com",
+  "checked_at": "2026-09-22T18:14:33.368Z",
+  "plans": [
+    {
+      "plan": "Free",
+      "price": 0,
+      "currency": "USD",
+      "unit": null,
+      "billing": "free"
+    },
+    {
+      "plan": "Pro",
+      "price": 8.75,
+      "currency": "USD",
+      "unit": "active user",
+      "billing": "monthly"
+    },
+    {
+      "plan": "Business+",
+      "price": 18,
+      "currency": "USD",
+      "unit": "active user",
+      "billing": "monthly"
+    }
+  ]
+}

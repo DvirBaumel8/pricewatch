@@ -1,0 +1,34 @@
+{
+  "site": "notion.com",
+  "checked_at": "2026-09-22T18:14:33.107Z",
+  "plans": [
+    {
+      "plan": "Free",
+      "price": 0,
+      "currency": "USD",
+      "unit": null,
+      "billing": "free"
+    },
+    {
+      "plan": "Plus",
+      "price": 10,
+      "currency": "USD",
+      "unit": "member",
+      "billing": "monthly"
+    },
+    {
+      "plan": "Business",
+      "price": 20,
+      "currency": "USD",
+      "unit": "member",
+      "billing": "monthly"
+    },
+    {
+      "plan": "Enterprise",
+      "price": null,
+      "currency": "USD",
+      "unit": "member",
+      "billing": "custom"
+    }
+  ]
+}

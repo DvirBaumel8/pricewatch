@@ -20,6 +20,15 @@
 **Total LLM tokens: 0** (all deterministic regex/DOM extraction).  
 **Cap compliance:** No LLM step used; hard cap 8000 tokens would abort — not triggered.
 
+**Fresh-clone honesty:** Live snapshots are gitignored (runtime state).
+Golden fixtures committed at `test/fixtures/wedge/golden-ladders/*.json` so
+`test/test-w1-spot-check.js` passes on fresh clone without network.
+To regenerate live: `npm run ladder:allowlist` (~3s, needs network).
+
+**Incomplete ladder note:** Plausible Business $19 is present on the live page
+but not extracted (Starter $9 + Growth $14 only). This is incomplete, not
+wrong — no false price shipped. Do not overclaim "complete ladder" for Plausible.
+
 ## W2 — Diff email format
 
 **Evidence:** `test/test-wedge.js` (30 tests), `test/test-email-format.js` (25 tests)
@@ -97,22 +106,16 @@ scripts/generate-sample-emails.js — Sample email generator for CEO review
 4. **Alert fires** — Diff detects change → customer email with plan + old$→new$ table
 5. **Banner silent** — Identical plans re-run → 0 changes → no email (noise gate)
 
-### HTML plan picker (Beat 2.5 browser demo)
-
-`npm run pick` → `http://127.0.0.1:3900/pick/vercel.com`
-
-- Dark theme, clean plan rows with checkboxes (no raw JSON visible)
-- "Watch selected plans" or "Watch all paid plans" buttons
-- Confirmation page: "✓ Watching vercel.com — Pro"
-- Persisted to `data/watched/vercel-com.json`
-
 ### Verification
 
-- **No localhost/127.0.0.1** in any customer-facing output (grep = 0)
-- **No raw JSON fields** shown in picker HTML (grep = 0)
+- **No localhost/127.0.0.1** in terminal demo output (grep = 0)
+- **No raw JSON fields** on screen — clean plan names only
 - **No free-text jargon** — customer picks from extracted ladder rows
+- **Sell-facing runbook** (`docs/demo-runbook-w6.md`) contains zero localhost references
 
-**Runbook:** `docs/demo-runbook-w6.md`
+**Primary record path:** Terminal demo only (no browser).  
+**HTML plan picker** (`scripts/plan-picker-server.js`) exists for internal testing.
+It is NOT part of the sell recording path. Ops-only.
 
 **Carlos records; Dev does not record unless asked.** Launch writes beat sheet.
 
@@ -132,8 +135,8 @@ scripts/generate-sample-emails.js — Sample email generator for CEO review
 - `outbox/samples/vercel-pro-price-bump.json`
 - `outbox/samples/linear-basic-price-bump.json`
 - `outbox/samples/notion-new-plan-added.json`
-- `data/snapshots/ladder/*.json` (6 baseline snapshots)
-- `scripts/demo-w6-sell.js` (record-ready 5-beat demo script)
-- `scripts/plan-picker-server.js` (HTML plan picker for Beat 2.5)
+- `test/fixtures/wedge/golden-ladders/*.json` (6 committed golden snapshots for fresh-clone W1)
+- `scripts/demo-w6-sell.js` (record-ready 5-beat demo script — terminal only, no localhost)
+- `scripts/plan-picker-server.js` (HTML plan picker — internal ops only, not sell path)
 - `src/plan-selection.js` (plan-selection persistence)
-- `docs/demo-runbook-w6.md` (exact commands + narration for Carlos)
+- `docs/demo-runbook-w6.md` (sell-facing runbook — zero localhost references)
