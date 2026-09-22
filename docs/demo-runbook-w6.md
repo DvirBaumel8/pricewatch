@@ -1,127 +1,85 @@
-# W6 sell-demo runbook — screen record ≤90s
+# W6 sell-demo runbook — browser UI ≤90–120s
 
-**For:** Carlos (record) · Launch (beat sheet)  
-**Dev state:** Record-ready. Terminal demo only. No secrets needed.
+**For:** Carlos (record) · Launch (beat sheet v2 inbox-first)  
+**Dev state:** Browser sell UI ready. Inbox is the hero. No secrets needed.
 
-## Record command (one line)
-
-```bash
-clear && node scripts/demo-w6-sell.js
-```
-
-That's it. This fetches Vercel's **live** pricing page, shows the full sell
-story in 5 beats, finishes in ~3 seconds. Dark terminal, no browser needed.
-
-### Offline fallback (no network)
+## Primary record path (browser)
 
 ```bash
-clear && node scripts/demo-w6-sell.js --fixture
+npm run demo-ui
 ```
+
+Then open the PriceWatch page in the browser **fullscreen** and **hide the address bar**.
+
+- Cold open already shows a **preloaded** sample alert: Pro $20 → $25 (Plan · Was · Now).
+- Inbox-only frame for Beat 1: append `?view=inbox` to the page URL.
+- Fresh workbench (no sample): `?demo=fresh`.
+
+**Do not** show the address bar, terminal, or JSON on camera.
 
 ### Fresh clone setup (before first run)
 
 ```bash
 git clone https://github.com/DvirBaumel8/pricewatch.git
 cd pricewatch
-npm run ladder:allowlist     # extracts live plan data (~3s, needs network)
-node scripts/demo-w6-sell.js # run the demo
+# optional engineer setup: extract live pricing plans from supported pages
+npm run demo-ui
 ```
 
 ---
 
-## What the camera sees (5 beats, ~60s)
+## What the camera sees (script v2 — inbox first)
 
-### Beat 1 — Structured plan ladder
+### Beat 0 — Cold open (~2s)
 
-```
-┌─────────────────┬─────────────┬──────────────────┬──────────┐
-│ Plan            │ Price       │ Unit             │ Billing  │
-├─────────────────┼─────────────┼──────────────────┼──────────┤
-│ Hobby           │ $0          │ —                │ free     │
-│ Pro             │ $20         │ developer seat   │ monthly  │
-│ Enterprise      │ Custom      │ —                │ custom   │
-└─────────────────┴─────────────┴──────────────────┴──────────┘
-```
+Split UI idle with inbox already showing an unread PriceWatch row. Music starts.
 
-**Narration:** "We extract the full plan ladder — structured, not vague.
-Hobby is free, Pro is $20 per developer seat, Enterprise is custom."
+**Caption:** Competitor price — in your inbox.
 
-### Beat 2.5 — Customer picks which plans to watch
+### Beat 1 — Inbox hero (~22s) — LEAD
 
-```
-  ➜  Customer selects: "Pro"
+1. Click the unread row (subject like `Pro $20 → $25 · vercel.com`).
+2. Hold on the open message — large **Plan · Was · Now** table ($20/mo → $25/mo).
 
-       Hobby            $0          (not watching)
-    ✓  Pro              $20
-       Enterprise       Custom      (not watching)
+**Narration:** "When a competitor’s Pro plan moves from twenty to twenty-five dollars, you get one email. Plan name. Old number. New number."
 
-  ✓ Watching: Pro on vercel.com
-```
+### Beat 2 — Problem + not noise (~8s)
 
-**Narration:** "The customer picks from the plans we found — not free-text.
-They select Pro because that's the plan they compete with."
+Optional cutaway: hand-refresh on a public pricing tab, or a noisy “page changed” alert — then cut back.
 
-### Beat 3 — Price bump
+**Caption:** Hand-refresh is the old way · Banner ≠ price
 
-The table reprints with Pro $20 → $25.
+### Beat 3 — How it works (~28s)
 
-**Narration:** "Next morning, Vercel raised Pro by $5."
+On the left workbench:
 
-### Beat 4 — Alert fires → customer email
+1. Pricing URL is prefilled (`https://vercel.com/pricing`) → click **Read plans**.
+2. Pricing plans table fills (Hobby / Pro / Enterprise…).
+3. Tap **Pro** (or **Watch all paid plans**). Chip: Watching: Pro.
+4. Click **Simulate price bump** — inbox updates with a fresh alert.
 
-```
-Subject: PriceWatch: vercel.com pricing changed
+**Narration:** "Paste a pricing page we support. We read the plans and prices. You tap which plan to watch."
 
-Hi Dvir,
+### Beat 4 — Banner silence (~12s)
 
-We detected pricing changes on vercel.com.
+Click **Simulate banner-only**. Trust banner: *No price changes — banner/copy edits stay quiet.* No new unread.
 
-  Plan            | Field    | Before     | After
-  --------------- | -------- | ---------- | ----------
-  Pro             | price    | $20        | $25
+**Narration:** "Cookie banners stay quiet. We check once a day, morning Israel time."
 
-Pro price increased from $20 to $25.
+### Beat 5 — Ask (~8s)
 
-Open pricing page: https://vercel.com/pricing
-
-Detected 22 Sept 2026, 21:15 GMT+3.
-
-Questions? Reply to this email or write price.watcher.service@gmail.com.
-
-— PriceWatch
-```
-
-**Narration:** "The founder gets an email: which plan moved, old price, new price.
-Table format. One clear sentence. Link to the pricing page. Done."
-
-### Beat 5 — Banner-only → silent
-
-```
-Changes detected: 0
-Signal: NO → no email
-✓ Noise gate: banner/copy changes stay silent.
-```
-
-**Narration:** "When it's just a banner change — no email. No noise.
-That's the difference versus Visualping."
+End card / VO: Pitch A + soft CTA — pilot when ready / waitlist. No outreach.
 
 ---
 
 ## Recording tips
 
-1. **Dark terminal,** ≥16pt font, max 80 columns wide.
-2. **Clear first:** `clear && node scripts/demo-w6-sell.js`
-3. Entire demo runs in **<3 seconds** — clean scroll, no waiting.
-4. **No secrets, no `.env`, no browser.** Works on a fresh clone after `npm run ladder:allowlist`.
-5. **No internal/lab addresses in any customer-facing output** — verified.
-
-## Alternative wide-shot (optional opening)
-
-```bash
-node src/plan-ladder-monitor.js --allowlist
-```
-
-Shows all 6 SaaS sites with plan counts. Good as a "we cover six competitors" opening frame.
+1. **Fullscreen browser,** hide address bar, zoom 125–150% if needed so the Was/Now table reads on phone preview.
+2. **Inbox first** — do not lecture setup before the email open.
+3. Large type is already in the UI; keep captions ≤8 words/line.
+4. Continuous music bed; zero dead air in the first 5–10s.
+5. **No terminal, no localhost, no JSON** on camera.
+6. One competitor for the whole clip (Vercel default).
 
 ## Test suite (optional closing frame)
 
@@ -129,22 +87,27 @@ Shows all 6 SaaS sites with plan counts. Good as a "we cover six competitors" op
 npm test
 ```
 
-97+ tests passing in ~1 second.
-
 ---
 
-## Files
+## Sell-facing assets
 
-| File | Purpose |
+| Asset | Purpose |
 |------|---------|
-| `scripts/demo-w6-sell.js` | Terminal demo: 5 beats, live or `--fixture` |
-| `src/plan-ladder.js` | Multi-plan extractor (6 sites, 0 LLM tokens) |
-| `src/plan-ladder-email.js` | Customer email template |
+| `npm run demo-ui` | **Primary sell UI** — workbench + inbox hero |
 | `outbox/samples/` | Pre-generated sample emails for reference |
-| `docs/retros/wedge-demo-7d.md` | Full W1–W3 + W6 evidence retrospective |
 
 ---
 
-*Internal ops note: `scripts/plan-picker-server.js` serves an HTML plan picker
-for internal testing. It binds to a local port and is NOT part of the sell
-recording path. Do not screen-record the browser picker for customer-facing video.*
+## Engineer-only footnote (not for sell recording)
+
+Internal modules power the UI (`scripts/demo-ui-server.js`, pricing-plan extractors, selection store, email writer).
+
+```bash
+npm run ladder:allowlist          # extract live pricing plans (~3s, network)
+node scripts/demo-w6-sell.js      # CLI paced script — engineer only
+node scripts/demo-w6-sell.js --fixture
+```
+
+Do **not** screen-record the terminal for customer-facing video. The CEO rejected CLI as the demo surface.
+
+Internal HTML plan picker (`npm run pick`) is also engineer-only — not the sell path.

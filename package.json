@@ -28,7 +28,8 @@
     "send-outbox": "node scripts/send-outbox.js",
     "demo": "node scripts/demo-w6-sell.js",
     "demo:fixture": "node scripts/demo-w6-sell.js --fixture",
-    "pick": "node scripts/plan-picker-server.js"
+    "pick": "node scripts/plan-picker-server.js",
+    "demo-ui": "node scripts/demo-ui-server.js"
   },
   "repository": {
     "type": "git",
