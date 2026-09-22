@@ -1,0 +1,19 @@
+{
+  "description": "W3 Fixture A: Pro plan +$10 price bump → should fire alert",
+  "site": "example-saas.com",
+  "pricing_url": "https://example-saas.com/pricing",
+  "old_plans": [
+    { "plan": "Free", "price": 0, "currency": "USD", "unit": null, "billing": "free" },
+    { "plan": "Pro", "price": 20, "currency": "USD", "unit": "seat", "billing": "monthly" },
+    { "plan": "Enterprise", "price": null, "currency": "USD", "unit": null, "billing": "custom" }
+  ],
+  "new_plans": [
+    { "plan": "Free", "price": 0, "currency": "USD", "unit": null, "billing": "free" },
+    { "plan": "Pro", "price": 30, "currency": "USD", "unit": "seat", "billing": "monthly" },
+    { "plan": "Enterprise", "price": null, "currency": "USD", "unit": null, "billing": "custom" }
+  ],
+  "expected_signal": true,
+  "expected_changes": [
+    { "plan": "Pro", "field": "price", "old": 20, "new": 30, "type": "price_change" }
+  ]
+}

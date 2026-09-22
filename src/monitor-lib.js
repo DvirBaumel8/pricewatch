@@ -185,9 +185,6 @@ function writePriceChangeEmail(skill, before, after, customerInfo) {
   return emailPath;
 }
 
-/**
- * Write an ops alert to the outbox (not customer-facing).
- */
 function writeOpsAlert(skillId, error, customerInfo) {
   fs.mkdirSync(OUTBOX_DIR, { recursive: true });
   const ts = new Date().toISOString().replace(/[:.]/g, "-");
@@ -208,33 +205,18 @@ function writeOpsAlert(skillId, error, customerInfo) {
   return alertPath;
 }
 
-/**
- * Load a skill by its ID. Searches SKILLS_DIR for <skillId>.json.
- */
 function loadSkill(skillId) {
   const skillPath = path.join(SKILLS_DIR, `${skillId}.json`);
   if (!fs.existsSync(skillPath)) return null;
   return JSON.parse(fs.readFileSync(skillPath, "utf8"));
 }
 
-/**
- * Load a skill by its file path (relative to project root).
- */
 function loadSkillByPath(skillPath) {
   const fullPath = path.resolve(__dirname, "..", skillPath);
   if (!fs.existsSync(fullPath)) return null;
   return JSON.parse(fs.readFileSync(fullPath, "utf8"));
 }
 
-/**
- * Run a single monitor check for a skill. Returns a result object.
- *
- * @param {string} skillId - skill file basename (without .json)
- * @param {object} opts
- * @param {object} opts.customerInfo - { customerId, customerEmail, customerName }
- * @param {object} opts.skill - pre-loaded skill object (optional; will load from disk if omitted)
- * @returns {{ status, before, after, emailPath, opsAlertPath, snapshotPath, error }}
- */
 async function runMonitorCheck(skillId, opts = {}) {
   const t0 = Date.now();
   const customerInfo = opts.customerInfo || null;
@@ -341,6 +323,8 @@ module.exports = {
   friendlyName,
   formatJerusalemTime,
   formatDisplay,
+  isLocalUrl,
+  friendlyPricingLink,
   SKILLS_DIR,
   SNAPSHOTS_DIR,
   OUTBOX_DIR,
