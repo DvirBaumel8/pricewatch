@@ -78,6 +78,25 @@ scripts/generate-sample-emails.js — Sample email generator for CEO review
 - ✅ Cites sources (snapshot files, test results)
 - ✅ Proof left (this file, test fixtures, sample emails)
 
+## W6 — Record-ready sell demo (≤90s)
+
+**State:** Ready for Carlos to screen-record.
+
+**Demo script:** `node scripts/demo-w6-sell.js` (live Vercel) or `--fixture` (offline)
+
+**4 scenes in ~60s of terminal:**
+
+1. **Extract** — Vercel live plan ladder: Hobby Free / Pro $20 / Enterprise Custom
+2. **Price bump** — Pro $20 → $25 injected into snapshot
+3. **Alert fires** — Diff detects change → customer email with table (Plan | Field | Before | After)
+4. **Banner silent** — Identical plans re-run → 0 changes → no email (noise gate)
+
+**No localhost/127.0.0.1 in any output** — verified (grep returns 0 hits).
+
+**Runbook:** `docs/demo-runbook-w6.md` — exact commands, narration cues, recording tips.
+
+**Carlos records; Dev does not record unless asked.** Launch writes beat sheet.
+
 ## Blockers
 
 - W4 (side-by-side honesty note): deferred to Carlos
@@ -95,3 +114,5 @@ scripts/generate-sample-emails.js — Sample email generator for CEO review
 - `outbox/samples/linear-basic-price-bump.json`
 - `outbox/samples/notion-new-plan-added.json`
 - `data/snapshots/ladder/*.json` (6 baseline snapshots)
+- `scripts/demo-w6-sell.js` (record-ready demo script)
+- `docs/demo-runbook-w6.md` (exact commands + narration for Carlos)

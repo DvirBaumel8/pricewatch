@@ -25,7 +25,9 @@
     "test:offline": "bash scripts/test-7.2-offline.sh",
     "ladder": "node src/plan-ladder-monitor.js",
     "ladder:allowlist": "node src/plan-ladder-monitor.js --allowlist",
-    "send-outbox": "node scripts/send-outbox.js"
+    "send-outbox": "node scripts/send-outbox.js",
+    "demo": "node scripts/demo-w6-sell.js",
+    "demo:fixture": "node scripts/demo-w6-sell.js --fixture"
   },
   "repository": {
     "type": "git",
