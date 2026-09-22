@@ -175,6 +175,8 @@ function writePriceChangeEmail(skill, before, after, customerInfo) {
       "",
       `Detected ${formatJerusalemTime(now)}.`,
       "",
+      "Questions? Reply to this email or write price.watcher.service@gmail.com.",
+      "",
       "— PriceWatch",
     ].join("\n"),
   };

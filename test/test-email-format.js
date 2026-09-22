@@ -173,6 +173,13 @@ test("Body: no internal labels (§8.1, acceptance, OAuth, test harness)", () => 
   assert(!lower.includes("test harness"), "body contains 'test harness'");
 });
 
+test("Body: support line with price.watcher.service@gmail.com", () => {
+  assert(
+    email.body.includes("Questions? Reply to this email or write price.watcher.service@gmail.com."),
+    "missing support contact line"
+  );
+});
+
 test("Body: ends with PriceWatch signature", () => {
   assert(email.body.trimEnd().endsWith("— PriceWatch"), "missing signature");
 });

@@ -83,7 +83,7 @@ bash scripts/cron-daily-monitor.sh
 curl -s -X POST http://127.0.0.1:3847/set-price \
   -H 'Content-Type: application/json' -d '{"amount": 39}'
 bash scripts/cron-daily-monitor.sh
-# → partner should receive email within seconds
+# → partner should receive a change email after the daily check completes
 ```
 
 ## 5b. gmail-mcp drain (preferred §8.1 path — no secrets needed)
@@ -143,15 +143,30 @@ See `docs/cron-pilot.md` for crontab or nohup loop setup. The daily cron:
 
 ## What we promise / don't promise
 
+**What we say (locked language):**
+
+> PriceWatch emails you when a competitor's price changes — so you stop
+> refreshing their pricing page.
+>
+> We run a **daily** price check (**morning Israel time**) on the public
+> pricing pages we agreed to watch. If that price moved, you get an email.
+> Reply to the email (or write price.watcher.service@gmail.com) if something
+> looks wrong, you want a pause, or you want to cancel.
+
 **We promise:**
-- Daily check of allowlisted competitor pricing pages
-- Email notification within minutes of detecting a change
+- Daily check (morning Israel time) of allowlisted competitor pricing pages
+- Email when the daily check finds a price changed
 - No spam: only real price changes trigger email
-- Kill switch available at any time
+- Kill switch / pause / cancel available at any time
+
+**We do NOT say:**
+- Instant / always-on / 24/7 monitoring
+- "Within minutes of every change" — we only know after the daily check
+- Slack alerts (pilot is email only)
+- Any URL, Shopify stores, or pages behind login
 
 **We don't promise:**
 - Coverage of every website (only allowlisted domains — see `docs/allowlist.md`)
-- Real-time monitoring (daily cadence)
 - 100% accuracy on complex pricing pages
 - SLA on uptime (pilot phase)
 
