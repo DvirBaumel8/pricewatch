@@ -1,0 +1,17 @@
+{
+  "description": "W3 Fixture B: Banner/copy change only → should NOT fire alert",
+  "site": "example-saas.com",
+  "pricing_url": "https://example-saas.com/pricing",
+  "old_plans": [
+    { "plan": "Free", "price": 0, "currency": "USD", "unit": null, "billing": "free" },
+    { "plan": "Pro", "price": 20, "currency": "USD", "unit": "seat", "billing": "monthly" },
+    { "plan": "Enterprise", "price": null, "currency": "USD", "unit": null, "billing": "custom" }
+  ],
+  "new_plans": [
+    { "plan": "Free", "price": 0, "currency": "USD", "unit": null, "billing": "free" },
+    { "plan": "Pro", "price": 20, "currency": "USD", "unit": "seat", "billing": "monthly" },
+    { "plan": "Enterprise", "price": null, "currency": "USD", "unit": null, "billing": "custom" }
+  ],
+  "expected_signal": false,
+  "expected_changes": []
+}

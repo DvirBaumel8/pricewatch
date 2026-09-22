@@ -1,0 +1,22 @@
+{
+  "type": "plan_ladder_change",
+  "site": "linear.app",
+  "pricing_url": "https://linear.app/pricing",
+  "customer_id": "ceo-demo",
+  "customer_email": "dvirbaumel9@gmail.com",
+  "customer_name": "Dvir",
+  "timestamp": "2026-09-22T18:32:55.674Z",
+  "changes": [
+    {
+      "plan": "Basic",
+      "field": "price",
+      "old": 10,
+      "new": 12,
+      "type": "price_change",
+      "currency": "USD",
+      "billing": "monthly"
+    }
+  ],
+  "subject": "PriceWatch: linear.app pricing changed",
+  "body": "Hi Dvir,\n\nWe detected pricing changes on linear.app.\n\n  Plan            | Field    | Before     | After\n  --------------- | -------- | ---------- | ----------\n  Basic           | price    | $10        | $12       \n\nBasic price increased from $10 to $12.\n\nOpen pricing page: https://linear.app/pricing\n\nDetected 22 Sept 2026, 21:32 GMT+3.\n\nQuestions? Reply to this email or write price.watcher.service@gmail.com.\n\n— PriceWatch"
+}

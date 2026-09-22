@@ -1,0 +1,20 @@
+{
+  "site": "plausible.io",
+  "checked_at": "2026-09-22T18:14:33.131Z",
+  "plans": [
+    {
+      "plan": "Starter",
+      "price": 9,
+      "currency": "USD",
+      "unit": "~10k pageviews",
+      "billing": "monthly"
+    },
+    {
+      "plan": "Growth",
+      "price": 14,
+      "currency": "USD",
+      "unit": "~10k pageviews",
+      "billing": "monthly"
+    }
+  ]
+}

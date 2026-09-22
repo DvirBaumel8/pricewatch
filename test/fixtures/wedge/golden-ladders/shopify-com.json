@@ -1,0 +1,34 @@
+{
+  "site": "shopify.com",
+  "checked_at": "2026-09-22T18:14:33.438Z",
+  "plans": [
+    {
+      "plan": "Basic",
+      "price": 29,
+      "currency": "USD",
+      "unit": null,
+      "billing": "monthly"
+    },
+    {
+      "plan": "Grow",
+      "price": 79,
+      "currency": "USD",
+      "unit": null,
+      "billing": "monthly"
+    },
+    {
+      "plan": "Advanced",
+      "price": 299,
+      "currency": "USD",
+      "unit": null,
+      "billing": "monthly"
+    },
+    {
+      "plan": "Plus",
+      "price": 2300,
+      "currency": "USD",
+      "unit": null,
+      "billing": "monthly"
+    }
+  ]
+}

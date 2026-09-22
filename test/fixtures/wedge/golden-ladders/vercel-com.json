@@ -1,0 +1,27 @@
+{
+  "site": "vercel.com",
+  "checked_at": "2026-09-22T18:25:00.456Z",
+  "plans": [
+    {
+      "plan": "Hobby",
+      "price": 0,
+      "currency": "USD",
+      "unit": null,
+      "billing": "free"
+    },
+    {
+      "plan": "Pro",
+      "price": 20,
+      "currency": "USD",
+      "unit": "developer seat",
+      "billing": "monthly"
+    },
+    {
+      "plan": "Enterprise",
+      "price": null,
+      "currency": "USD",
+      "unit": null,
+      "billing": "custom"
+    }
+  ]
+}
