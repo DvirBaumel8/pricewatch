@@ -8,4 +8,6 @@ data/snapshots/*.json
 data/queue.json
 data/queue.json.bak
 data/customers.json
+data/monitor-ticks.json
+data/KILL
 lab/price.json.bak
