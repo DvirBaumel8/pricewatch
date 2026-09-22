@@ -15,14 +15,14 @@
  *   1 — unexpected error
  *   7 — no mail credentials configured (distinct, documented for Boris)
  *
- * Env vars (see .env.example):
+ * Env vars (see .env.example — Carlos-locked defaults):
  *   PRICEWATCH_SMTP_HOST   (default smtp.gmail.com)
- *   PRICEWATCH_SMTP_PORT   (default 465)
- *   PRICEWATCH_SMTP_SECURE (1 = implicit TLS on 465; unset + port 587 = STARTTLS)
- *   PRICEWATCH_SMTP_USER   (default PRICEWATCH_MAIL_FROM)
- *   PRICEWATCH_SMTP_PASS   (app password — never commit)
- *   PRICEWATCH_MAIL_FROM   (From: header)
- *   PRICEWATCH_MAIL_REPLY_TO / PRICEWATCH_REPLY_TO (Reply-To header)
+ *   PRICEWATCH_SMTP_PORT   (default 587 — STARTTLS)
+ *   PRICEWATCH_SMTP_SECURE (1 = implicit TLS on 465; unset = STARTTLS on 587)
+ *   PRICEWATCH_SMTP_USER   (default price.watcher.service@gmail.com)
+ *   PRICEWATCH_SMTP_PASS   (Gmail app password — never commit)
+ *   PRICEWATCH_MAIL_FROM   (default = SMTP_USER)
+ *   PRICEWATCH_MAIL_REPLY_TO / PRICEWATCH_REPLY_TO (Reply-To; default = MAIL_FROM)
  *   RESEND_API_KEY          (alternative to SMTP)
  */
 
@@ -36,18 +36,17 @@ const crypto = require("crypto");
 const OUTBOX_DIR = path.resolve(__dirname, "..", "outbox");
 const SENT_DIR = path.join(OUTBOX_DIR, "sent");
 
-const MAIL_FROM =
-  process.env.PRICEWATCH_MAIL_FROM || "price.watcher.service@gmail.com";
+const SMTP_HOST = process.env.PRICEWATCH_SMTP_HOST || "smtp.gmail.com";
+const SMTP_PORT = parseInt(process.env.PRICEWATCH_SMTP_PORT || "587", 10);
+const SMTP_SECURE = process.env.PRICEWATCH_SMTP_SECURE;
+const SMTP_USER =
+  process.env.PRICEWATCH_SMTP_USER || "price.watcher.service@gmail.com";
+const SMTP_PASS = process.env.PRICEWATCH_SMTP_PASS || "";
+const MAIL_FROM = process.env.PRICEWATCH_MAIL_FROM || SMTP_USER;
 const REPLY_TO =
   process.env.PRICEWATCH_MAIL_REPLY_TO ||
   process.env.PRICEWATCH_REPLY_TO ||
   MAIL_FROM;
-
-const SMTP_HOST = process.env.PRICEWATCH_SMTP_HOST || "smtp.gmail.com";
-const SMTP_PORT = parseInt(process.env.PRICEWATCH_SMTP_PORT || "465", 10);
-const SMTP_SECURE = process.env.PRICEWATCH_SMTP_SECURE;
-const SMTP_USER = process.env.PRICEWATCH_SMTP_USER || MAIL_FROM;
-const SMTP_PASS = process.env.PRICEWATCH_SMTP_PASS || "";
 
 const RESEND_API_KEY = process.env.RESEND_API_KEY || "";
 

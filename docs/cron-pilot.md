@@ -17,17 +17,17 @@ cp .env.example .env
 # edit .env — set PRICEWATCH_SMTP_PASS (Gmail app password from Carlos)
 ```
 
-Key vars the cron scripts source from `.env`:
+Key vars the cron scripts source from `.env` (Carlos-locked defaults):
 
 | Variable | Required | Default | Notes |
 |---|---|---|---|
 | `PRICEWATCH_SMTP_PASS` | **yes** (or `RESEND_API_KEY`) | — | Gmail app password; never commit |
 | `PRICEWATCH_SMTP_HOST` | no | `smtp.gmail.com` | |
-| `PRICEWATCH_SMTP_PORT` | no | `465` | Use 587 for STARTTLS |
-| `PRICEWATCH_SMTP_SECURE` | no | `1` (if port 465) | Set `0` if using port 587 |
-| `PRICEWATCH_SMTP_USER` | no | `PRICEWATCH_MAIL_FROM` | |
-| `PRICEWATCH_MAIL_FROM` | no | `price.watcher.service@gmail.com` | |
-| `PRICEWATCH_MAIL_REPLY_TO` | no | same as FROM | Boris alias: `PRICEWATCH_REPLY_TO` also accepted |
+| `PRICEWATCH_SMTP_PORT` | no | `587` | STARTTLS; use 465 + `SMTP_SECURE=1` for implicit TLS |
+| `PRICEWATCH_SMTP_SECURE` | no | unset (STARTTLS) | Set `1` only if using port 465 |
+| `PRICEWATCH_SMTP_USER` | no | `price.watcher.service@gmail.com` | |
+| `PRICEWATCH_MAIL_FROM` | no | same as `SMTP_USER` | |
+| `PRICEWATCH_MAIL_REPLY_TO` | no | same as `MAIL_FROM` | Boris alias: `PRICEWATCH_REPLY_TO` also accepted |
 
 ## Option A: crontab (preferred)
 

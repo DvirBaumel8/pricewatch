@@ -143,14 +143,16 @@ Currently manual (no self-serve UI yet):
 
 ## Ops section (Boris)
 
-### Env vars
+### Env vars (Carlos-locked)
 
 All mail-related env vars are documented in `.env.example` and `docs/cron-pilot.md`.
-Key ones for the pilot box:
+The SMTP config is locked by Carlos — use these exact values:
 
+- `PRICEWATCH_SMTP_USER=price.watcher.service@gmail.com`
 - `PRICEWATCH_SMTP_PASS` — Gmail app password (Carlos provides via secret-request)
-- `PRICEWATCH_MAIL_FROM` — sender address (`price.watcher.service@gmail.com`)
-- `PRICEWATCH_MAIL_REPLY_TO` / `PRICEWATCH_REPLY_TO` — reply-to address
+- `PRICEWATCH_SMTP_HOST=smtp.gmail.com`
+- `PRICEWATCH_SMTP_PORT=587` (STARTTLS)
+- `PRICEWATCH_MAIL_FROM=price.watcher.service@gmail.com` (or defaults to SMTP_USER)
 
 ### Cron stay-alive
 
