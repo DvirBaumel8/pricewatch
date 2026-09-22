@@ -86,11 +86,36 @@ bash scripts/cron-daily-monitor.sh
 # → partner should receive email within seconds
 ```
 
+## 5b. gmail-mcp drain (when SMTP_PASS / RESEND_API_KEY are absent)
+
+When `send-outbox.js` exits 7 (no credentials), use a Cursor agent with the
+Gmail MCP connected to `price.watcher.service@gmail.com`:
+
+```bash
+# 1. List unsent outbox files (no network, pure filesystem)
+node scripts/list-unsent-outbox.js
+# → one JSON line per file: { file, to, subject, body }
+
+# 2. Agent calls Gmail MCP send_message for each line:
+#      to:      entry.to   (customer_email or PRICEWATCH_TEST_EMAIL)
+#      subject: entry.subject
+#      body:    entry.body
+#    From = the OAuth-authenticated Gmail (price.watcher.service@gmail.com).
+
+# 3. After each successful send, mark the file:
+node scripts/mark-outbox-sent.js <entry.file> gmail-mcp
+```
+
+Outbox JSON is kept as audit trail. The `.sent` sidecar is the same format
+used by SMTP/Resend, so idempotency works across all three transports.
+
+This is the **preferred §8.1 path** when SMTP secret injection is broken.
+
 ## 6. Confirm inbox delivery
 
 - Check the partner's inbox (or `price.watcher.service@gmail.com` for lab tests)
 - Verify: subject mentions the competitor, body shows before/after amounts
-- Verify: no duplicate on re-run (`send-outbox.js` is idempotent)
+- Verify: no duplicate on re-run (`.sent` sidecar prevents re-send across all transports)
 
 ## 7. Enable daily cron
 
