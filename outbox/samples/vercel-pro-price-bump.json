@@ -1,0 +1,22 @@
+{
+  "type": "plan_ladder_change",
+  "site": "vercel.com",
+  "pricing_url": "https://vercel.com/pricing",
+  "customer_id": "ceo-demo",
+  "customer_email": "dvirbaumel9@gmail.com",
+  "customer_name": "Dvir",
+  "timestamp": "2026-09-22T18:15:26.130Z",
+  "changes": [
+    {
+      "plan": "Pro",
+      "field": "price",
+      "old": 20,
+      "new": 25,
+      "type": "price_change",
+      "currency": "USD",
+      "billing": "monthly"
+    }
+  ],
+  "subject": "PriceWatch: vercel.com pricing changed",
+  "body": "Hi Dvir,\n\nWe detected pricing changes on vercel.com.\n\n  Plan            | Field    | Before     | After\n  --------------- | -------- | ---------- | ----------\n  Pro             | price    | $20        | $25       \n\nPro price increased from $20 to $25.\n\nOpen pricing page: https://vercel.com/pricing\n\nDetected 22 Sept 2026, 21:15 GMT+3.\n\nQuestions? Reply to this email or write price.watcher.service@gmail.com.\n\n— PriceWatch"
+}

@@ -1,0 +1,24 @@
+{
+  "type": "plan_ladder_change",
+  "site": "notion.com",
+  "pricing_url": "https://www.notion.com/pricing",
+  "customer_id": "ceo-demo",
+  "customer_email": "dvirbaumel9@gmail.com",
+  "customer_name": "Dvir",
+  "timestamp": "2026-09-22T18:15:26.149Z",
+  "changes": [
+    {
+      "plan": "Business",
+      "field": "plan",
+      "old": null,
+      "new": "Business",
+      "type": "plan_added",
+      "newPrice": 20,
+      "newCurrency": "USD",
+      "newUnit": "member",
+      "newBilling": "monthly"
+    }
+  ],
+  "subject": "PriceWatch: notion.com pricing changed",
+  "body": "Hi Dvir,\n\nWe detected pricing changes on notion.com.\n\n  Plan            | Field    | Before     | After\n  --------------- | -------- | ---------- | ----------\n  Business        | plan     | —          | Business  \n\nNew plan detected: Business.\n\nOpen pricing page: https://www.notion.com/pricing\n\nDetected 22 Sept 2026, 21:15 GMT+3.\n\nQuestions? Reply to this email or write price.watcher.service@gmail.com.\n\n— PriceWatch"
+}
