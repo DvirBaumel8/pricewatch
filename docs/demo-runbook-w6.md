@@ -9,11 +9,12 @@
 npm run demo-ui
 ```
 
-Then open the PriceWatch page in the browser **fullscreen** and **hide the address bar**.
+Then open the PriceWatch page in the browser **fullscreen** and **hide the address bar** (required for camera — the bind is local for ops only; never show the address bar or any loopback host on camera).
 
 - Cold open already shows a **preloaded** sample alert: Pro $20 → $25 (Plan · Was · Now).
-- Inbox-only frame for Beat 1: append `?view=inbox` to the page URL.
+- Inbox-only frame for Beat 1: append `?view=inbox` to the page URL (fullscreen + hide address bar).
 - Fresh workbench (no sample): `?demo=fresh`.
+- **Before every take:** start a fresh `npm run demo-ui` process **or** click **Reset demo** so Pro stays on the canonical **$20 → $25** story (repeat bumps must not drift to $30).
 
 **Do not** show the address bar, terminal, or JSON on camera.
 
@@ -74,12 +75,13 @@ End card / VO: Pitch A + soft CTA — pilot when ready / waitlist. No outreach.
 
 ## Recording tips
 
-1. **Fullscreen browser,** hide address bar, zoom 125–150% if needed so the Was/Now table reads on phone preview.
-2. **Inbox first** — do not lecture setup before the email open.
+1. **Fullscreen browser + hide address bar** (required). Zoom 125–150% if needed so the Was/Now table reads on phone preview. Ops bind is local only — never leave the address bar visible.
+2. **Inbox first** — do not lecture setup before the email open. Prefer `?view=inbox` for Beat 1.
 3. Large type is already in the UI; keep captions ≤8 words/line.
 4. Continuous music bed; zero dead air in the first 5–10s.
-5. **No terminal, no localhost, no JSON** on camera.
+5. **No terminal, no localhost / 127, no JSON** on camera.
 6. One competitor for the whole clip (Vercel default).
+7. **Reset before the take** — fresh process or **Reset demo** so the bump stays Pro **$20 → $25** (no mid-take snapshot drift).
 
 ## Test suite (optional closing frame)
 

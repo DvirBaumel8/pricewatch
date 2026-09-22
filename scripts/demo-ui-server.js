@@ -256,10 +256,32 @@ function renderPage() {
       height: 100vh;
       gap: 0;
     }
+    /* view=inbox: workbench is display:none (out of grid), so use a single 1fr column.
+       Using "0 1fr" left .inbox in the zero-width track and collapsed the hero. */
     body.view-inbox .app {
-      grid-template-columns: 0 1fr;
+      grid-template-columns: 1fr;
+      height: 100vh;
+      width: 100%;
     }
     body.view-inbox .workbench { display: none; }
+    body.view-inbox .inbox {
+      width: 100%;
+      min-width: 0;
+      height: 100vh;
+    }
+    body.view-inbox .inbox-body {
+      grid-template-columns: minmax(280px, 28%) 1fr;
+      min-height: 0;
+      flex: 1;
+    }
+    body.view-inbox .mail-open {
+      min-width: 0;
+      width: auto;
+    }
+    body.view-inbox .msg-subject { font-size: 2.1rem; }
+    body.view-inbox .change-table { font-size: 1.45rem; }
+    body.view-inbox .change-table td.plan { font-size: 1.55rem; }
+    body.view-inbox .change-table td.now { font-size: 1.7rem; }
 
     /* ── Workbench ── */
     .workbench {
@@ -518,13 +540,15 @@ function renderPage() {
     .trust-banner.show { display: block; }
 
     @media (max-width: 980px) {
-      body { overflow: auto; }
-      .app { grid-template-columns: 1fr; height: auto; min-height: 100vh; }
-      .inbox { min-height: 70vh; }
-      .inbox-body { grid-template-columns: 1fr; }
-      .mail-list { max-height: 220px; border-right: none; border-bottom: 1px solid var(--border); }
+      body:not(.view-inbox) { overflow: auto; }
+      body:not(.view-inbox) .app { grid-template-columns: 1fr; height: auto; min-height: 100vh; }
+      body:not(.view-inbox) .inbox { min-height: 70vh; }
+      body:not(.view-inbox) .inbox-body { grid-template-columns: 1fr; }
+      body:not(.view-inbox) .mail-list { max-height: 220px; border-right: none; border-bottom: 1px solid var(--border); }
       .msg-subject { font-size: 1.55rem; }
       .change-table { font-size: 1.15rem; }
+      body.view-inbox .msg-subject { font-size: 2rem; }
+      body.view-inbox .change-table { font-size: 1.35rem; }
     }
   </style>
 </head>
@@ -572,6 +596,9 @@ function renderPage() {
         <div class="sim-actions">
           <button class="btn btn-bump" id="bumpBtn" type="button" disabled>Simulate price bump</button>
           <button class="btn btn-quiet" id="bannerBtn" type="button" disabled>Simulate banner-only</button>
+        </div>
+        <div style="margin-top:10px">
+          <button class="btn btn-ghost" id="resetBtn" type="button" style="width:100%">Reset demo</button>
         </div>
         <p class="status-line" id="statusLine" style="margin-top:12px"></p>
       </div>
@@ -625,6 +652,9 @@ function renderPage() {
       state.emails = [{ id: "sample", ...SAMPLE_EMAIL }];
       state.activeId = "sample";
       state.trust = false;
+      state.watching = false;
+      syncSimControls();
+      updateWatchChip();
       renderInbox();
       setStatus("Sample alert ready — inbox is the hero.", "ok");
     }
@@ -674,14 +704,20 @@ function renderPage() {
         });
       });
       updateWatchChip();
-      $("bumpBtn").disabled = false;
-      $("bannerBtn").disabled = false;
+      syncSimControls();
+    }
+
+    function syncSimControls() {
+      const ready = state.plans.length > 0;
+      $("bumpBtn").disabled = !ready;
+      $("bannerBtn").disabled = !ready;
     }
 
     function updateWatchChip() {
       const chip = $("watchChip");
       const text = $("watchChipText");
-      if (!state.watching) {
+      // Only show Watching after an explicit watch from a loaded plan list
+      if (!state.watching || !state.plans.length) {
         chip.hidden = true;
         return;
       }
@@ -886,6 +922,32 @@ function renderPage() {
       }
     });
 
+    $("resetBtn").addEventListener("click", async () => {
+      setStatus("Resetting demo…");
+      try {
+        const data = await post("/api/reset-demo", {});
+        state.plans = data.plans || [];
+        state.selected = new Set(["Pro"]);
+        state.mode = "selected";
+        state.watching = false;
+        state.trust = false;
+        state.url = data.url || state.url;
+        state.site = data.site || state.site;
+        if (data.email) {
+          state.emails = [{ id: "sample", ...data.email, unread: true }];
+          state.activeId = "sample";
+        } else {
+          preloadSample();
+        }
+        renderPlans();
+        renderInbox();
+        setStatus("Demo reset — Pro $20 → $25 ready.", "ok");
+      } catch (err) {
+        setStatus(err.message || "Reset failed", "err");
+      }
+    });
+
+    syncSimControls();
     applyViewMode();
   </script>
 </body>
@@ -944,9 +1006,12 @@ const server = http.createServer(async (req, res) => {
       const planName = body.plan || "Pro";
       const delta = Number(body.delta) || BUMP_DELTA;
 
-      let base = resolvePlans(pricingUrl);
-      if (!base) base = { site, plans: FIXTURE_PLANS };
-      const oldPlans = base.plans.map((p) => ({ ...p }));
+      // Demo record: always bump from canonical base so takes never drift ($20→$25→$30).
+      const canonical =
+        site === DEFAULT_SITE
+          ? FIXTURE_PLANS
+          : (resolvePlans(pricingUrl) || { plans: FIXTURE_PLANS }).plans;
+      const oldPlans = canonical.map((p) => ({ ...p }));
       const newPlans = bumpPlans(oldPlans, planName, delta);
       const { changes, hasSignal } = diffPlanLadders(oldPlans, newPlans);
 
@@ -972,17 +1037,37 @@ const server = http.createServer(async (req, res) => {
         customerName: "Dvir",
       });
       const emailJson = JSON.parse(fs.readFileSync(emailPath, "utf8"));
-      saveLadderSnapshot(site, newPlans);
+      // Snap back to canonical base after the write so the next bump stays on-story.
+      saveLadderSnapshot(site, oldPlans.map((p) => ({ ...p })));
 
       sendJson(res, 200, {
         hasSignal: true,
         changes: filtered,
         email: emailFromOutbox(emailJson),
-        plans: newPlans,
+        plans: oldPlans,
         outbox: path.basename(emailPath),
       });
     } catch (err) {
       sendJson(res, 500, { error: err.message || "Simulate failed" });
+    }
+    return;
+  }
+
+  if (req.method === "POST" && url.pathname === "/api/reset-demo") {
+    try {
+      const restored = FIXTURE_PLANS.map((p) => ({ ...p }));
+      saveLadderSnapshot(DEFAULT_SITE, restored);
+      saveSelection(DEFAULT_SITE, { mode: "selected", plans: ["Pro"] });
+      sendJson(res, 200, {
+        ok: true,
+        site: DEFAULT_SITE,
+        url: DEFAULT_URL,
+        plans: restored,
+        email: buildSampleEmail(),
+        message: "Demo reset to Pro $20 → $25.",
+      });
+    } catch (err) {
+      sendJson(res, 500, { error: err.message || "Reset failed" });
     }
     return;
   }
@@ -1006,9 +1091,16 @@ const server = http.createServer(async (req, res) => {
   res.end("Not found");
 });
 
+// Bind is loopback for local ops only — never print the raw URL in sell console lines.
+saveLadderSnapshot(
+  DEFAULT_SITE,
+  FIXTURE_PLANS.map((p) => ({ ...p }))
+);
+
 server.listen(PORT, "127.0.0.1", () => {
   console.log(`PriceWatch demo UI ready (port ${PORT})`);
-  console.log("Open the browser fullscreen and hide the address bar for recording.");
+  console.log("Open demo UI fullscreen and hide the address bar for recording.");
   console.log("Cold open: inbox preloaded with sample Pro $20 → $25 alert.");
-  console.log("Inbox-only frame: add ?view=inbox to the page URL.");
+  console.log("Inbox-only frame: open demo UI with ?view=inbox (fullscreen).");
+  console.log("Before a take: fresh process, or hit Reset demo so Pro stays $20 → $25.");
 });
