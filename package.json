@@ -27,7 +27,8 @@
     "ladder:allowlist": "node src/plan-ladder-monitor.js --allowlist",
     "send-outbox": "node scripts/send-outbox.js",
     "demo": "node scripts/demo-w6-sell.js",
-    "demo:fixture": "node scripts/demo-w6-sell.js --fixture"
+    "demo:fixture": "node scripts/demo-w6-sell.js --fixture",
+    "pick": "node scripts/plan-picker-server.js"
   },
   "repository": {
     "type": "git",

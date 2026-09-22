@@ -5,16 +5,18 @@
  * W6 sell-demo script — record-ready pipeline walkthrough.
  *
  * Shows the full PriceWatch story in a clean terminal:
- *   Scene 1 — Extract Vercel's live plan ladder (structured, not vague)
- *   Scene 2 — Simulate a price bump: Pro $20 → $25
- *   Scene 3 — Re-run monitor → diff fires → customer email printed
- *   Scene 4 — Banner-only re-run → noise gate stays silent
+ *   Beat 1   — Extract Vercel's live plan ladder (structured, not vague)
+ *   Beat 2.5 — Customer picks which plans to watch (not free-text jargon)
+ *   Beat 3   — Simulate a price bump: Pro $20 → $25
+ *   Beat 4   — Re-run monitor → diff fires → customer email printed
+ *   Beat 5   — Banner-only re-run → noise gate stays silent
  *
  * Usage:
  *   node scripts/demo-w6-sell.js              (Vercel live — default)
  *   node scripts/demo-w6-sell.js --fixture    (offline fixtures, no network)
  *
  * No localhost/127.0.0.1 appears anywhere in output.
+ * No raw JSON fields on screen — clean plan names only.
  * Designed for Carlos to screen-record in ≤90s.
  */
 
@@ -24,6 +26,7 @@ const { extractPlanLadder } = require("../src/plan-ladder");
 const { saveLadderSnapshot, loadLadderSnapshot, LADDER_DIR } = require("../src/plan-ladder-snapshot");
 const { diffPlanLadders } = require("../src/plan-ladder-diff");
 const { writePlanLadderEmail, buildChangeTable, buildSummaryLine } = require("../src/plan-ladder-email");
+const { saveSelection } = require("../src/plan-selection");
 
 const DEMO_SITE = "vercel.com";
 const DEMO_URL = "https://vercel.com/pricing";
@@ -44,18 +47,31 @@ function hr() {
   console.log("─".repeat(64));
 }
 
-function pause(label) {
+function beat(label) {
   console.log(`\n${"▸".repeat(3)}  ${label}\n`);
 }
 
-function printPlans(plans) {
-  console.log("  Plan            | Price       | Unit             | Billing");
-  console.log("  --------------- | ----------- | ---------------- | --------");
+function printLadder(plans) {
+  console.log("  ┌─────────────────┬─────────────┬──────────────────┬──────────┐");
+  console.log("  │ Plan            │ Price       │ Unit             │ Billing  │");
+  console.log("  ├─────────────────┼─────────────┼──────────────────┼──────────┤");
   for (const p of plans) {
     const price = p.price === null ? "Custom" : `$${p.price}`;
     console.log(
-      `  ${(p.plan || "—").padEnd(15)} | ${price.padEnd(11)} | ${(p.unit || "—").padEnd(16)} | ${p.billing}`
+      `  │ ${(p.plan || "—").padEnd(15)} │ ${price.padEnd(11)} │ ${(p.unit || "—").padEnd(16)} │ ${(p.billing || "").padEnd(8)} │`
     );
+  }
+  console.log("  └─────────────────┴─────────────┴──────────────────┴──────────┘");
+}
+
+function printPlanPick(plans, selected) {
+  const selSet = new Set(selected.map((s) => s.toLowerCase()));
+  for (const p of plans) {
+    const isSelected = selSet.has(p.plan.toLowerCase());
+    const marker = isSelected ? "  ✓" : "   ";
+    const price = p.price === null ? "Custom" : `$${p.price}`;
+    const dim = isSelected ? "" : "  (not watching)";
+    console.log(`  ${marker}  ${p.plan.padEnd(15)}  ${price.padEnd(10)}${dim}`);
   }
 }
 
@@ -80,7 +96,8 @@ function cleanupDemo() {
 async function runLive() {
   cleanupDemo();
 
-  pause("SCENE 1 — Extract Vercel's live plan ladder");
+  // ── Beat 1: Extract ────────────────────────────────────────────
+  beat("BEAT 1 — Extract the plan ladder from vercel.com");
   console.log(`  Fetching ${DEMO_URL} ...`);
   const result = await extractPlanLadder(DEMO_URL);
   if (!result.plans || result.plans.length === 0) {
@@ -89,24 +106,35 @@ async function runLive() {
     return runFixture();
   }
   console.log(`  ✓ Extracted ${result.plans.length} plans (0 LLM tokens, ${result.wallMs}ms)\n`);
-  printPlans(result.plans);
+  printLadder(result.plans);
 
   saveLadderSnapshot(DEMO_SITE, result.plans);
-  console.log(`\n  Baseline snapshot saved.\n`);
+  console.log(`\n  Baseline snapshot saved.`);
   hr();
 
-  pause("SCENE 2 — Simulate price bump: Pro $20 → $25");
+  // ── Beat 2.5: Pick plans ───────────────────────────────────────
+  beat("BEAT 2.5 — Pick which plans to watch");
+  console.log("  The customer sees the plan ladder and picks rows.\n");
+  console.log('  ➜  Customer selects: "Pro" (the paid plan they compete with)\n');
+  printPlanPick(result.plans, ["Pro"]);
+  saveSelection(DEMO_SITE, { mode: "selected", plans: ["Pro"] });
+  console.log('\n  ✓ Watching: Pro on vercel.com');
+  console.log('    (Also available: "Watch all paid plans" — one click)');
+  hr();
+
+  // ── Beat 3: Price bump ─────────────────────────────────────────
+  beat("BEAT 3 — Next morning: Vercel raised Pro by $5");
   const bumpedPlans = result.plans.map((p) => {
     if (p.plan === "Pro") return { ...p, price: p.price + 5 };
     return p;
   });
-  console.log("  Injecting simulated change into snapshot...\n");
-  printPlans(bumpedPlans);
+  printLadder(bumpedPlans);
   saveLadderSnapshot(DEMO_SITE, bumpedPlans);
-  console.log(`\n  New snapshot saved (Pro now $${bumpedPlans.find(p => p.plan === "Pro").price}).\n`);
+  console.log(`\n  Pro is now $${bumpedPlans.find((p) => p.plan === "Pro").price}.`);
   hr();
 
-  pause("SCENE 3 — Diff → alert fires → customer email");
+  // ── Beat 4: Alert fires ────────────────────────────────────────
+  beat("BEAT 4 — Diff → alert fires → customer email");
   const { changes, hasSignal } = diffPlanLadders(result.plans, bumpedPlans);
   console.log(`  Changes detected: ${changes.length}`);
   console.log(`  Signal (price/plan/seat move): ${hasSignal ? "YES → EMAIL" : "no → silent"}\n`);
@@ -127,37 +155,44 @@ async function runLive() {
   }
   hr();
 
-  pause("SCENE 4 — Banner-only change → noise gate stays silent");
+  // ── Beat 5: Banner-only ────────────────────────────────────────
+  beat("BEAT 5 — Banner-only change → noise gate stays silent");
   console.log("  Re-running with identical plans (simulating banner/copy edit)...");
   const { changes: noChanges, hasSignal: noSignal } = diffPlanLadders(bumpedPlans, bumpedPlans);
   console.log(`  Changes detected: ${noChanges.length}`);
   console.log(`  Signal: ${noSignal ? "YES" : "NO → no email"}`);
-  console.log("\n  ✓ Noise gate working: banner/copy changes do not trigger alerts.\n");
+  console.log("\n  ✓ Noise gate: banner/copy changes do not trigger alerts.\n");
   hr();
 
   saveLadderSnapshot(DEMO_SITE, result.plans);
 
-  console.log("\n  Demo complete. PriceWatch tells you WHICH plan moved and old$ → new$.");
-  console.log("  No vague 'page changed'. No banner noise. Structured signal only.\n");
+  console.log("\n  PriceWatch: pick the plans you care about.");
+  console.log("  Get an email when the price moves. Not when a banner changes.\n");
 }
 
 async function runFixture() {
   cleanupDemo();
 
-  pause("SCENE 1 — Structured plan ladder (Vercel fixture)");
+  beat("BEAT 1 — Structured plan ladder (Vercel fixture)");
   console.log("  Using offline fixture (no network required)\n");
-  printPlans(FIXTURE_OLD);
-
+  printLadder(FIXTURE_OLD);
   saveLadderSnapshot(DEMO_SITE, FIXTURE_OLD);
-  console.log(`\n  Baseline snapshot saved.\n`);
+  console.log(`\n  Baseline snapshot saved.`);
   hr();
 
-  pause("SCENE 2 — Price bump: Pro $20 → $25");
-  printPlans(FIXTURE_BUMPED);
-  console.log();
+  beat("BEAT 2.5 — Pick which plans to watch");
+  console.log("  The customer sees the plan ladder and picks rows.\n");
+  console.log('  ➜  Customer selects: "Pro"\n');
+  printPlanPick(FIXTURE_OLD, ["Pro"]);
+  saveSelection(DEMO_SITE, { mode: "selected", plans: ["Pro"] });
+  console.log('\n  ✓ Watching: Pro on vercel.com');
   hr();
 
-  pause("SCENE 3 — Diff → alert fires → customer email");
+  beat("BEAT 3 — Price bump: Pro $20 → $25");
+  printLadder(FIXTURE_BUMPED);
+  hr();
+
+  beat("BEAT 4 — Diff → alert fires → customer email");
   const { changes, hasSignal } = diffPlanLadders(FIXTURE_OLD, FIXTURE_BUMPED);
   console.log(`  Changes detected: ${changes.length}`);
   console.log(`  Signal (price/plan/seat move): ${hasSignal ? "YES → EMAIL" : "no → silent"}\n`);
@@ -178,7 +213,7 @@ async function runFixture() {
   }
   hr();
 
-  pause("SCENE 4 — Banner-only → noise gate stays silent");
+  beat("BEAT 5 — Banner-only → noise gate stays silent");
   const { changes: noChanges, hasSignal: noSignal } = diffPlanLadders(FIXTURE_BUMPED, FIXTURE_BUMPED);
   console.log(`  Changes detected: ${noChanges.length}`);
   console.log(`  Signal: ${noSignal ? "YES" : "NO → no email"}`);
@@ -187,14 +222,14 @@ async function runFixture() {
 
   saveLadderSnapshot(DEMO_SITE, FIXTURE_OLD);
 
-  console.log("\n  Demo complete. Structured plan + old$ → new$ table. No banner noise.\n");
+  console.log("\n  Pick the plans. Get the email. No banner noise.\n");
 }
 
 async function main() {
   console.log();
   console.log("  ╔══════════════════════════════════════════════════════════╗");
   console.log("  ║  PriceWatch — Plan Ladder Demo                         ║");
-  console.log("  ║  Structured pricing changes, not vague 'page changed'  ║");
+  console.log("  ║  Pick plans to watch. Get emailed when prices move.    ║");
   console.log("  ╚══════════════════════════════════════════════════════════╝");
   console.log();
   hr();

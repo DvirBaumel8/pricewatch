@@ -122,4 +122,16 @@ function diffPlanLadders(oldPlans, newPlans) {
   return { changes, hasSignal };
 }
 
-module.exports = { diffPlanLadders, normalizePlan };
+/**
+ * Filter changes to only include plans the customer chose to watch.
+ */
+function filterBySelection(changes, selection) {
+  if (!selection) return changes;
+  if (selection.mode === "all_paid") {
+    return changes;
+  }
+  const watched = new Set(selection.plans.map((p) => p.toLowerCase()));
+  return changes.filter((c) => watched.has((c.plan || "").toLowerCase()));
+}
+
+module.exports = { diffPlanLadders, normalizePlan, filterBySelection };

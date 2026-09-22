@@ -11,9 +11,10 @@
 
 const fs = require("fs");
 const path = require("path");
-const { diffPlanLadders } = require("../src/plan-ladder-diff");
+const { diffPlanLadders, filterBySelection } = require("../src/plan-ladder-diff");
 const { writePlanLadderEmail, buildChangeTable, buildSummaryLine } = require("../src/plan-ladder-email");
 const { formatJerusalemTime, isLocalUrl } = require("../src/monitor-lib");
+const { saveSelection, loadSelection, isWatched, WATCHED_DIR } = require("../src/plan-selection");
 
 const OUTBOX_DIR = path.resolve(__dirname, "..", "outbox");
 const FIXTURE_DIR = path.resolve(__dirname, "fixtures", "wedge");
@@ -295,6 +296,93 @@ test("buildSummaryLine: plan added", () => {
 });
 
 cleanup();
+
+// ──────────────────────────────────────────────────────────────────
+//  Plan selection + filterBySelection
+// ──────────────────────────────────────────────────────────────────
+
+console.log("\n--- Plan selection + filter ---\n");
+
+function cleanupWatched() {
+  if (!fs.existsSync(WATCHED_DIR)) return;
+  for (const f of fs.readdirSync(WATCHED_DIR)) {
+    if (f.startsWith("test-")) {
+      fs.unlinkSync(path.join(WATCHED_DIR, f));
+    }
+  }
+}
+
+cleanupWatched();
+
+test("saveSelection + loadSelection round-trip", () => {
+  saveSelection("test-site.com", { mode: "selected", plans: ["Pro", "Business"] });
+  const sel = loadSelection("test-site.com");
+  assert(sel, "selection should exist");
+  assert(sel.mode === "selected", `mode=${sel.mode}`);
+  assert(sel.plans.length === 2, `plans.length=${sel.plans.length}`);
+  assert(sel.plans[0] === "Pro", `plans[0]=${sel.plans[0]}`);
+});
+
+test("isWatched: returns true for selected plan", () => {
+  assert(isWatched("test-site.com", "Pro"), "Pro should be watched");
+  assert(isWatched("test-site.com", "Business"), "Business should be watched");
+});
+
+test("isWatched: returns false for unselected plan", () => {
+  assert(!isWatched("test-site.com", "Free"), "Free should not be watched");
+  assert(!isWatched("test-site.com", "Hobby"), "Hobby should not be watched");
+});
+
+test("isWatched: all_paid mode watches everything", () => {
+  saveSelection("test-site.com", { mode: "all_paid", plans: [] });
+  assert(isWatched("test-site.com", "Pro"), "all_paid: Pro");
+  assert(isWatched("test-site.com", "Free"), "all_paid: Free");
+  assert(isWatched("test-site.com", "Enterprise"), "all_paid: Enterprise");
+});
+
+test("isWatched: no selection → watches all (backward compat)", () => {
+  assert(isWatched("nonexistent-site.com", "Pro"), "no selection = watch all");
+});
+
+test("filterBySelection: selected mode filters changes", () => {
+  const changes = [
+    { plan: "Pro", field: "price", old: 20, new: 30, type: "price_change" },
+    { plan: "Free", field: "price", old: 0, new: 5, type: "price_change" },
+  ];
+  const sel = { mode: "selected", plans: ["Pro"] };
+  const filtered = filterBySelection(changes, sel);
+  assert(filtered.length === 1, `filtered.length=${filtered.length}`);
+  assert(filtered[0].plan === "Pro", `plan=${filtered[0].plan}`);
+});
+
+test("filterBySelection: all_paid mode passes all changes", () => {
+  const changes = [
+    { plan: "Pro", field: "price", old: 20, new: 30, type: "price_change" },
+    { plan: "Free", field: "price", old: 0, new: 5, type: "price_change" },
+  ];
+  const sel = { mode: "all_paid", plans: [] };
+  const filtered = filterBySelection(changes, sel);
+  assert(filtered.length === 2, `filtered.length=${filtered.length}`);
+});
+
+test("filterBySelection: null selection passes all changes", () => {
+  const changes = [
+    { plan: "Pro", field: "price", old: 20, new: 30, type: "price_change" },
+  ];
+  const filtered = filterBySelection(changes, null);
+  assert(filtered.length === 1, `filtered.length=${filtered.length}`);
+});
+
+test("filterBySelection: case-insensitive plan matching", () => {
+  const changes = [
+    { plan: "Pro", field: "price", old: 20, new: 30, type: "price_change" },
+  ];
+  const sel = { mode: "selected", plans: ["pro"] };
+  const filtered = filterBySelection(changes, sel);
+  assert(filtered.length === 1, "case-insensitive should match");
+});
+
+cleanupWatched();
 
 // ──────────────────────────────────────────────────────────────────
 

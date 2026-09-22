@@ -8,6 +8,7 @@ data/snapshots.local.json
 data/snapshots/*.json
 !data/snapshots/.gitkeep
 data/snapshots/ladder/*.json
+data/watched/*.json
 data/queue.json
 data/queue.json.bak
 data/customers.json

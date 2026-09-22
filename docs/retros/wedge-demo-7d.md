@@ -60,10 +60,13 @@
 ```
 src/plan-ladder.js          — Multi-plan extractor (6 site-specific + generic)
 src/plan-ladder-snapshot.js — Structured snapshot store (data/snapshots/ladder/)
-src/plan-ladder-diff.js     — Diff engine + noise gate
+src/plan-ladder-diff.js     — Diff engine + noise gate + filterBySelection
 src/plan-ladder-email.js    — Customer email template (table + summary)
 src/plan-ladder-monitor.js  — Full pipeline: extract → snapshot → diff → email
+src/plan-selection.js       — Plan-selection store (data/watched/)
 src/monitor-lib.js          — Updated: Jerusalem time, no-localhost, support line
+scripts/plan-picker-server.js  — HTML plan picker for Beat 2.5 (no raw JSON)
+scripts/demo-w6-sell.js     — Record-ready 5-beat demo (live or --fixture)
 scripts/send-outbox.js      — Mailer transport (Resend/SMTP) ported from PR #8
 scripts/generate-sample-emails.js — Sample email generator for CEO review
 ```
@@ -82,18 +85,34 @@ scripts/generate-sample-emails.js — Sample email generator for CEO review
 
 **State:** Ready for Carlos to screen-record.
 
-**Demo script:** `node scripts/demo-w6-sell.js` (live Vercel) or `--fixture` (offline)
+### Terminal demo
 
-**4 scenes in ~60s of terminal:**
+`node scripts/demo-w6-sell.js` (live Vercel) or `--fixture` (offline)
+
+**5 beats in ~60s:**
 
 1. **Extract** — Vercel live plan ladder: Hobby Free / Pro $20 / Enterprise Custom
-2. **Price bump** — Pro $20 → $25 injected into snapshot
-3. **Alert fires** — Diff detects change → customer email with table (Plan | Field | Before | After)
-4. **Banner silent** — Identical plans re-run → 0 changes → no email (noise gate)
+2. **Pick plans** (Beat 2.5) — Customer picks "Pro" from ladder rows (not free-text jargon)
+3. **Price bump** — Pro $20 → $25 injected into snapshot
+4. **Alert fires** — Diff detects change → customer email with plan + old$→new$ table
+5. **Banner silent** — Identical plans re-run → 0 changes → no email (noise gate)
 
-**No localhost/127.0.0.1 in any output** — verified (grep returns 0 hits).
+### HTML plan picker (Beat 2.5 browser demo)
 
-**Runbook:** `docs/demo-runbook-w6.md` — exact commands, narration cues, recording tips.
+`npm run pick` → `http://127.0.0.1:3900/pick/vercel.com`
+
+- Dark theme, clean plan rows with checkboxes (no raw JSON visible)
+- "Watch selected plans" or "Watch all paid plans" buttons
+- Confirmation page: "✓ Watching vercel.com — Pro"
+- Persisted to `data/watched/vercel-com.json`
+
+### Verification
+
+- **No localhost/127.0.0.1** in any customer-facing output (grep = 0)
+- **No raw JSON fields** shown in picker HTML (grep = 0)
+- **No free-text jargon** — customer picks from extracted ladder rows
+
+**Runbook:** `docs/demo-runbook-w6.md`
 
 **Carlos records; Dev does not record unless asked.** Launch writes beat sheet.
 
@@ -107,12 +126,14 @@ scripts/generate-sample-emails.js — Sample email generator for CEO review
 
 - `test/fixtures/wedge/fixture-a-price-bump.json`
 - `test/fixtures/wedge/fixture-b-banner-only.json`
-- `test/test-wedge.js` (30 tests)
+- `test/test-wedge.js` (39 tests)
 - `test/test-email-format.js` (25 tests)
 - `test/test-w1-spot-check.js` (6 tests)
 - `outbox/samples/vercel-pro-price-bump.json`
 - `outbox/samples/linear-basic-price-bump.json`
 - `outbox/samples/notion-new-plan-added.json`
 - `data/snapshots/ladder/*.json` (6 baseline snapshots)
-- `scripts/demo-w6-sell.js` (record-ready demo script)
+- `scripts/demo-w6-sell.js` (record-ready 5-beat demo script)
+- `scripts/plan-picker-server.js` (HTML plan picker for Beat 2.5)
+- `src/plan-selection.js` (plan-selection persistence)
 - `docs/demo-runbook-w6.md` (exact commands + narration for Carlos)

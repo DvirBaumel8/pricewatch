@@ -3,15 +3,15 @@
 **For:** Carlos (record) · Launch (beat sheet)  
 **Dev state:** Record-ready. No setup needed beyond `git clone` + `node ≥18`.
 
-## Quick start (one command)
+## Quick start — terminal demo (one command)
 
 ```bash
 node scripts/demo-w6-sell.js
 ```
 
-This fetches Vercel's **live** pricing page, extracts the full plan ladder,
-simulates a Pro +$5 price bump, fires the diff → email, then proves the
-noise gate stays silent on banner-only changes. ~2 seconds, no secrets needed.
+Fetches Vercel's **live** pricing page, extracts the plan ladder, shows customer
+picking "Pro" to watch, simulates a price bump, fires the diff → email, then
+proves the noise gate stays silent. ~3 seconds, no secrets needed.
 
 ### Offline fallback (no network)
 
@@ -19,37 +19,72 @@ noise gate stays silent on banner-only changes. ~2 seconds, no secrets needed.
 node scripts/demo-w6-sell.js --fixture
 ```
 
-Uses hardcoded Vercel fixture data instead of a live fetch. Identical flow,
-guaranteed reproducible.
+## Quick start — browser demo (Beat 2.5 HTML picker)
+
+```bash
+# 1. Extract plan ladders (needs network, ~3s)
+npm run ladder:allowlist
+
+# 2. Start the plan picker UI
+npm run pick
+# → opens http://127.0.0.1:3900/pick/vercel.com
+
+# 3. Open browser to http://127.0.0.1:3900/pick/vercel.com
+#    Select "Pro" → click "Watch selected plans" → confirmation page
+```
+
+The HTML picker shows clean plan rows with checkboxes — no raw JSON visible.
+Dark theme, modern UI, screen-record friendly.
 
 ---
 
-## What the camera sees (4 scenes, ~60s of terminal)
+## What the camera sees (5 beats)
 
-### Scene 1 — Structured plan ladder (live)
+### Beat 1 — Structured plan ladder
 
 The script fetches `https://vercel.com/pricing` and prints a clean table:
 
 ```
-Plan            | Price       | Unit             | Billing
---------------- | ----------- | ---------------- | --------
-Hobby           | $0          | —                | free
-Pro             | $20         | developer seat   | monthly
-Enterprise      | Custom      | —                | custom
+┌─────────────────┬─────────────┬──────────────────┬──────────┐
+│ Plan            │ Price       │ Unit             │ Billing  │
+├─────────────────┼─────────────┼──────────────────┼──────────┤
+│ Hobby           │ $0          │ —                │ free     │
+│ Pro             │ $20         │ developer seat   │ monthly  │
+│ Enterprise      │ Custom      │ —                │ custom   │
+└─────────────────┴─────────────┴──────────────────┴──────────┘
 ```
 
 **Narration:** "We extract the full plan ladder — structured, not vague.
 Hobby is free, Pro is $20 per developer seat, Enterprise is custom."
 
-### Scene 2 — Simulate price bump
+### Beat 2.5 — Customer picks which plans to watch
 
-The script injects Pro $20 → $25 into the snapshot. Table updates on screen.
+**Terminal version** (in the demo script):
+```
+  ➜  Customer selects: "Pro"
 
-**Narration:** "Now we simulate Vercel raising the Pro price by $5."
+       Hobby            $0          (not watching)
+    ✓  Pro              $20
+       Enterprise       Custom      (not watching)
 
-### Scene 3 — Alert fires → customer email
+  ✓ Watching: Pro on vercel.com
+```
 
-The diff engine detects the price change. A customer email prints:
+**Browser version** (for richer visual — `npm run pick`):
+The customer sees the plan ladder as selectable rows with checkboxes.
+They check "Pro" and click **"Watch selected plans"** or **"Watch all paid plans."**
+Confirmation page: "✓ Watching vercel.com — Pro."
+
+**Narration:** "The customer picks from the plans we found — not free-text jargon.
+They select Pro because that's the plan they compete with."
+
+### Beat 3 — Price bump
+
+The script injects Pro $20 → $25. Updated table prints.
+
+**Narration:** "Next morning, Vercel raised Pro by $5."
+
+### Beat 4 — Alert fires → customer email
 
 ```
 Subject: PriceWatch: vercel.com pricing changed
@@ -60,7 +95,7 @@ We detected pricing changes on vercel.com.
 
   Plan            | Field    | Before     | After
   --------------- | -------- | ---------- | ----------
-  Pro             | price    | $20        | $25       
+  Pro             | price    | $20        | $25
 
 Pro price increased from $20 to $25.
 
@@ -76,57 +111,57 @@ Questions? Reply to this email or write price.watcher.service@gmail.com.
 **Narration:** "The founder gets an email: which plan moved, old price, new price.
 Table format. One clear sentence. Link to the pricing page. Done."
 
-### Scene 4 — Banner-only → silent
-
-The script re-runs with identical plans (simulating a banner/copy change).
+### Beat 5 — Banner-only → silent
 
 ```
 Changes detected: 0
 Signal: NO → no email
-✓ Noise gate working: banner/copy changes do not trigger alerts.
+✓ Noise gate: banner/copy changes stay silent.
 ```
 
-**Narration:** "And when it's just a banner change — no email. No noise.
+**Narration:** "When it's just a banner change — no email. No noise.
 That's the difference versus Visualping."
 
 ---
 
-## Recording tips for Carlos
+## Recording tips
 
-1. **Terminal setup:** Dark background, large font (≥16pt), max 80 columns wide.
-2. **Clear the terminal** before running: `clear && node scripts/demo-w6-sell.js`
-3. The entire demo runs in **<3 seconds** — scroll is clean, no waiting.
-4. **No secrets needed.** No `.env` file required. Works on a fresh clone.
-5. No localhost/127.0.0.1 appears in any output — customer-facing safe.
+1. **Terminal:** Dark background, ≥16pt font, 80 columns wide.
+2. **Browser (Beat 2.5):** The picker page has a dark theme. Full-screen the browser.
+3. **Two options for Beat 2.5:**
+   - **Option A (simple):** Run the terminal demo only — Beat 2.5 shows the CLI pick.
+   - **Option B (richer):** Split: terminal for Beats 1/3/4/5, browser for Beat 2.5 plan picker.
+4. **Clear terminal before running:** `clear && node scripts/demo-w6-sell.js`
+5. **No secrets needed.** No `.env`. Works on a fresh clone.
+6. **No localhost/127.0.0.1** in any customer-facing output.
 
-## Alternative demo: live allowlist scan
-
-To show breadth (6 SaaS sites in one pass):
+## Alternative demo: wide-shot allowlist scan
 
 ```bash
 node src/plan-ladder-monitor.js --allowlist
 ```
 
-Outputs all 6 sites with plan counts. Good as a "wide shot" before the
-Vercel deep-dive.
+Shows all 6 SaaS sites with plan counts. Good opening "wide shot."
 
-## Test suite (optional post-roll)
+## Test suite (optional closing frame)
 
 ```bash
 npm test
 ```
 
-Shows all 88 tests passing in ~1 second. Good closing frame.
+97 tests passing in ~1 second.
 
 ---
 
-## Files referenced
+## Files
 
 | File | Purpose |
 |------|---------|
-| `scripts/demo-w6-sell.js` | Self-contained demo script (live or fixture) |
+| `scripts/demo-w6-sell.js` | Terminal demo: 5 beats, live or `--fixture` |
+| `scripts/plan-picker-server.js` | HTML plan picker for Beat 2.5 browser recording |
+| `src/plan-selection.js` | Plan-selection persistence (data/watched/) |
+| `src/plan-ladder-diff.js` | Diff engine + noise gate + `filterBySelection` |
 | `src/plan-ladder.js` | Multi-plan extractor (6 sites, 0 LLM tokens) |
-| `src/plan-ladder-diff.js` | Diff engine + noise gate |
 | `src/plan-ladder-email.js` | Customer email template |
 | `outbox/samples/` | Pre-generated sample emails for reference |
-| `docs/retros/wedge-demo-7d.md` | Full W1–W3 evidence retrospective |
+| `docs/retros/wedge-demo-7d.md` | Full W1–W3 + W6 evidence retrospective |
