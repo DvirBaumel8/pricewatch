@@ -88,24 +88,26 @@ function formatDisplay(price) {
   return `$${price.amount}/${price.period === "month" ? "mo" : price.period}`;
 }
 
+function isLocalUrl(url) {
+  return /^https?:\/\/(localhost|127\.0\.0\.1)(:|\/|$)/.test(url || "");
+}
+
 function friendlyName(skill) {
   if (skill.site) return skill.site;
   const url = skill.base_url || skill.pricing_url || "";
-  if (/^https?:\/\/(localhost|127\.0\.0\.1)(:|\/|$)/.test(url)) {
-    return "Lab demo site";
+  if (isLocalUrl(url)) {
+    return skill.target_price_description || "the site you're watching";
   }
   try {
     return new URL(url).hostname;
   } catch {
-    return skill.target_price_description || "Unknown site";
+    return skill.target_price_description || "the site you're watching";
   }
 }
 
 function friendlyPricingLink(skill) {
   const url = skill.pricing_url || skill.base_url || "";
-  if (/^https?:\/\/(localhost|127\.0\.0\.1)(:|\/|$)/.test(url)) {
-    return `Lab demo pricing page\n${url}`;
-  }
+  if (isLocalUrl(url)) return "Your monitored pricing page";
   return `Open pricing page: ${url}`;
 }
 
@@ -152,7 +154,7 @@ function writePriceChangeEmail(skill, before, after, customerInfo) {
       period: after.period,
       display: formatDisplay(after),
     },
-    subject: `PriceWatch: ${name} price changed`,
+    subject: `PriceWatch: ${name} changed`,
     body: [
       `Hi${customerInfo && customerInfo.customerName ? ` ${customerInfo.customerName}` : ""},`,
       "",

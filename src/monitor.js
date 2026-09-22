@@ -85,8 +85,10 @@ function saveSnapshot(skillId, price) {
 function friendlyName(skill) {
   if (skill.site) return skill.site;
   const url = skill.base_url || skill.pricing_url || "";
-  if (/^https?:\/\/(localhost|127\.0\.0\.1)(:|\/|$)/.test(url)) return "Lab demo site";
-  try { return new URL(url).hostname; } catch { return skill.target_price_description || "Unknown site"; }
+  if (/^https?:\/\/(localhost|127\.0\.0\.1)(:|\/|$)/.test(url)) {
+    return skill.target_price_description || "the site you're watching";
+  }
+  try { return new URL(url).hostname; } catch { return skill.target_price_description || "the site you're watching"; }
 }
 
 function writeEmail(skill, before, after) {
@@ -116,7 +118,7 @@ function writeEmail(skill, before, after) {
       period: after.period,
       display: display(after),
     },
-    subject: `PriceWatch: ${name} price changed`,
+    subject: `PriceWatch: ${name} changed`,
     body: [
       `We detected a price change for ${skill.target_price_description} at ${name}.`,
       "",
