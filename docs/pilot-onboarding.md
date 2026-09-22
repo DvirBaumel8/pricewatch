@@ -10,8 +10,8 @@ real email when an allowlisted competitor's price changes.
 ## 1. Pre-flight checklist
 
 - [ ] Pilot box is running (Node 18+, repo pulled to latest `main`)
-- [ ] `.env` is populated — at minimum `PRICEWATCH_SMTP_PASS` is set
-      (see `.env.example` and `docs/cron-pilot.md`)
+- [ ] `.env` is populated — at minimum `RESEND_API_KEY` (preferred) or
+      `PRICEWATCH_SMTP_PASS` is set (see `.env.example` and `docs/cron-pilot.md`)
 - [ ] Lab test passed: `npm run test:e2e:mailer` shows PASS with real SMTP
       **or** mock-mode passes and real-send is documented for CEO
 - [ ] Cron or nohup loop is active (see `docs/cron-pilot.md`)
@@ -143,16 +143,27 @@ Currently manual (no self-serve UI yet):
 
 ## Ops section (Boris)
 
-### Env vars (Carlos-locked)
+### Env vars
 
 All mail-related env vars are documented in `.env.example` and `docs/cron-pilot.md`.
-The SMTP config is locked by Carlos — use these exact values:
+
+**Resend (preferred — §8.1 path):**
+
+- `RESEND_API_KEY` — Resend API key (Carlos provides via secret-request)
+- `PRICEWATCH_MAIL_FROM=PriceWatch <onboarding@resend.dev>` — Resend sandbox sender
+  (or a verified custom domain; Resend cannot send as `@gmail.com`)
+- `PRICEWATCH_MAIL_REPLY_TO=price.watcher.service@gmail.com` — replies go to support inbox
+
+**SMTP fallback (when Gmail app password available):**
 
 - `PRICEWATCH_SMTP_USER=price.watcher.service@gmail.com`
 - `PRICEWATCH_SMTP_PASS` — Gmail app password (Carlos provides via secret-request)
 - `PRICEWATCH_SMTP_HOST=smtp.gmail.com`
 - `PRICEWATCH_SMTP_PORT=587` (STARTTLS)
-- `PRICEWATCH_MAIL_FROM=price.watcher.service@gmail.com` (or defaults to SMTP_USER)
+- `PRICEWATCH_MAIL_FROM` — defaults to `SMTP_USER` for SMTP path
+
+**Transport override:** set `PRICEWATCH_MAIL_TRANSPORT=resend` (or `smtp`) to
+force one transport when both credentials are configured.
 
 ### Cron stay-alive
 
@@ -171,7 +182,7 @@ No additional wiring needed — just ensure `.env` has `PRICEWATCH_SMTP_PASS`.
 |---|---|---|
 | 0 | All sent (or nothing to send) | Normal |
 | 1 | Some sends failed | Check `logs/cron-daily.log`, retry |
-| 7 | No credentials | Set `PRICEWATCH_SMTP_PASS` in `.env` |
+| 7 | No credentials | Set `RESEND_API_KEY` or `PRICEWATCH_SMTP_PASS` in `.env` |
 
 ### Monitoring
 
@@ -186,7 +197,7 @@ No additional wiring needed — just ensure `.env` has `PRICEWATCH_SMTP_PASS`.
 | Problem | Fix |
 |---|---|
 | No email received | Check `outbox/` for `.json` files; check `.sent` sidecars; check `logs/cron-daily.log` for mailer errors |
-| Exit code 7 | `PRICEWATCH_SMTP_PASS` not set — add to `.env` |
+| Exit code 7 | No mail credentials — set `RESEND_API_KEY` or `PRICEWATCH_SMTP_PASS` in `.env` |
 | Duplicate emails | Should not happen (`.sent` sidecar prevents). If it does, check for corrupted `.sent` files |
 | Discovery failed | Site may not be allowlisted; check `docs/allowlist.md` |
 | Kill switch active | Remove `data/KILL` and unset `PRICEWATCH_KILL` |

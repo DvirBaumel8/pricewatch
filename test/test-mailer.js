@@ -8,10 +8,10 @@
  * §8.2: Unchanged price → zero customer emails
  *
  * Modes:
- *   - Mock mode (default): no SMTP creds → mailer exits 7, test verifies
+ *   - Mock mode (default): no creds → mailer exits 7, test verifies
  *     outbox files are correct and mailer is idempotent. Safe to run in CI.
- *   - Real-send mode: set PRICEWATCH_SMTP_PASS (or RESEND_API_KEY) →
- *     mailer sends real email. For CEO / Carlos acceptance.
+ *   - Real-send mode: set RESEND_API_KEY (preferred) or PRICEWATCH_SMTP_PASS
+ *     → mailer sends real email. For CEO / Carlos acceptance.
  *
  * Prerequisites:
  *   1. Lab server: node lab/server.js
@@ -19,7 +19,10 @@
  *
  * Usage:
  *   node test/test-mailer.js                  # mock mode
- *   PRICEWATCH_SMTP_PASS=xxx node test/test-mailer.js   # real-send mode
+ *   RESEND_API_KEY=re_xxx \
+ *     PRICEWATCH_MAIL_FROM='PriceWatch <onboarding@resend.dev>' \
+ *     PRICEWATCH_TEST_EMAIL=ceo@example.com \
+ *     node test/test-mailer.js                # real-send via Resend
  *   npm run test:e2e:mailer
  */
 
@@ -323,8 +326,8 @@ async function main() {
 
       const changeCount = countOutboxFiles("price-change");
       assert(changeCount === 1, `Outbox file should still exist, got ${changeCount}`);
-      console.log("    Outbox preserved. To test real send:");
-      console.log("    PRICEWATCH_SMTP_PASS=xxx node scripts/send-outbox.js");
+      console.log("    Outbox preserved. To test real send via Resend:");
+      console.log("    RESEND_API_KEY=re_xxx PRICEWATCH_MAIL_FROM='PriceWatch <onboarding@resend.dev>' node scripts/send-outbox.js");
     });
 
     await test("Idempotent: .sent sidecar prevents re-send (mock)", async () => {
@@ -358,8 +361,11 @@ async function main() {
     console.log("    Mode: REAL-SEND — check inbox for test email");
   } else {
     console.log("    Mode: MOCK — outbox + idempotency verified");
-    console.log("    For real-send acceptance (CEO):");
-    console.log("      PRICEWATCH_SMTP_PASS=xxx npm run test:e2e:mailer");
+    console.log("    For real-send acceptance (CEO) via Resend:");
+    console.log("      RESEND_API_KEY=re_xxx \\");
+    console.log("        PRICEWATCH_MAIL_FROM='PriceWatch <onboarding@resend.dev>' \\");
+    console.log("        PRICEWATCH_TEST_EMAIL=ceo@example.com \\");
+    console.log("        npm run test:e2e:mailer");
   }
   console.log("");
   process.exit(failed > 0 ? 1 : 0);

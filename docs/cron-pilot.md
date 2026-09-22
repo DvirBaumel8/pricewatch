@@ -14,20 +14,25 @@ Copy `.env.example` to `.env` and fill in credentials:
 
 ```bash
 cp .env.example .env
-# edit .env — set PRICEWATCH_SMTP_PASS (Gmail app password from Carlos)
+# edit .env — set RESEND_API_KEY (preferred) or PRICEWATCH_SMTP_PASS
 ```
 
-Key vars the cron scripts source from `.env` (Carlos-locked defaults):
+Key vars the cron scripts source from `.env`:
 
 | Variable | Required | Default | Notes |
 |---|---|---|---|
-| `PRICEWATCH_SMTP_PASS` | **yes** (or `RESEND_API_KEY`) | — | Gmail app password; never commit |
+| **Transport selection** | | | |
+| `RESEND_API_KEY` | **yes** (or `SMTP_PASS`) | — | Preferred transport; never commit |
+| `PRICEWATCH_MAIL_TRANSPORT` | no | auto (Resend if key set) | Force `resend` or `smtp` when both configured |
+| **Resend sender** | | | |
+| `PRICEWATCH_MAIL_FROM` | no | `PriceWatch <onboarding@resend.dev>` | Must be Resend-verified sender |
+| `PRICEWATCH_MAIL_REPLY_TO` | no | `price.watcher.service@gmail.com` | Boris alias: `PRICEWATCH_REPLY_TO` also accepted |
+| **SMTP fallback** | | | |
+| `PRICEWATCH_SMTP_PASS` | alt | — | Gmail app password; never commit |
 | `PRICEWATCH_SMTP_HOST` | no | `smtp.gmail.com` | |
 | `PRICEWATCH_SMTP_PORT` | no | `587` | STARTTLS; use 465 + `SMTP_SECURE=1` for implicit TLS |
 | `PRICEWATCH_SMTP_SECURE` | no | unset (STARTTLS) | Set `1` only if using port 465 |
 | `PRICEWATCH_SMTP_USER` | no | `price.watcher.service@gmail.com` | |
-| `PRICEWATCH_MAIL_FROM` | no | same as `SMTP_USER` | |
-| `PRICEWATCH_MAIL_REPLY_TO` | no | same as `MAIL_FROM` | Boris alias: `PRICEWATCH_REPLY_TO` also accepted |
 
 ## Option A: crontab (preferred)
 

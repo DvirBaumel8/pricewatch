@@ -15,15 +15,19 @@
  *   1 — unexpected error
  *   7 — no mail credentials configured (distinct, documented for Boris)
  *
- * Env vars (see .env.example — Carlos-locked defaults):
- *   PRICEWATCH_SMTP_HOST   (default smtp.gmail.com)
- *   PRICEWATCH_SMTP_PORT   (default 587 — STARTTLS)
- *   PRICEWATCH_SMTP_SECURE (1 = implicit TLS on 465; unset = STARTTLS on 587)
- *   PRICEWATCH_SMTP_USER   (default price.watcher.service@gmail.com)
- *   PRICEWATCH_SMTP_PASS   (Gmail app password — never commit)
- *   PRICEWATCH_MAIL_FROM   (default = SMTP_USER)
- *   PRICEWATCH_MAIL_REPLY_TO / PRICEWATCH_REPLY_TO (Reply-To; default = MAIL_FROM)
- *   RESEND_API_KEY          (alternative to SMTP)
+ * Env vars (see .env.example):
+ *   PRICEWATCH_MAIL_TRANSPORT  "resend" or "smtp" — explicit override; when
+ *                               unset, Resend is preferred if RESEND_API_KEY
+ *                               is set, else SMTP if SMTP_PASS is set.
+ *   RESEND_API_KEY              Resend API key (preferred transport for §8.1)
+ *   PRICEWATCH_SMTP_HOST        (default smtp.gmail.com)
+ *   PRICEWATCH_SMTP_PORT        (default 587 — STARTTLS)
+ *   PRICEWATCH_SMTP_SECURE      (1 = implicit TLS on 465; unset = STARTTLS)
+ *   PRICEWATCH_SMTP_USER        (default price.watcher.service@gmail.com)
+ *   PRICEWATCH_SMTP_PASS        (Gmail app password — never commit)
+ *   PRICEWATCH_MAIL_FROM        From: header; for Resend use a verified sender
+ *                               e.g. "PriceWatch <onboarding@resend.dev>"
+ *   PRICEWATCH_MAIL_REPLY_TO / PRICEWATCH_REPLY_TO  (default = MAIL_FROM)
  */
 
 const fs = require("fs");
@@ -49,6 +53,7 @@ const REPLY_TO =
   MAIL_FROM;
 
 const RESEND_API_KEY = process.env.RESEND_API_KEY || "";
+const MAIL_TRANSPORT = (process.env.PRICEWATCH_MAIL_TRANSPORT || "").toLowerCase();
 
 // ── transport detection ───────────────────────────────────────────
 
@@ -58,6 +63,12 @@ function hasSmtp() {
 
 function hasResend() {
   return !!RESEND_API_KEY;
+}
+
+function preferResend() {
+  if (MAIL_TRANSPORT === "resend") return true;
+  if (MAIL_TRANSPORT === "smtp") return false;
+  return hasResend();
 }
 
 function useImplicitTls() {
@@ -194,10 +205,15 @@ async function sendViaSmtp(to, subject, textBody) {
 
 // ── Resend HTTP API transport ─────────────────────────────────────
 
+function formatFrom(addr) {
+  if (/<.*>/.test(addr)) return addr;
+  return `PriceWatch <${addr}>`;
+}
+
 function sendViaResend(to, subject, textBody) {
   return new Promise((resolve, reject) => {
     const payload = JSON.stringify({
-      from: `PriceWatch <${MAIL_FROM}>`,
+      from: formatFrom(MAIL_FROM),
       to: [to],
       reply_to: REPLY_TO,
       subject,
@@ -238,6 +254,10 @@ function sendViaResend(to, subject, textBody) {
 // ── generic send ──────────────────────────────────────────────────
 
 async function sendEmail(to, subject, textBody) {
+  if (preferResend() && hasResend()) {
+    await sendViaResend(to, subject, textBody);
+    return "resend";
+  }
   if (hasSmtp()) {
     await sendViaSmtp(to, subject, textBody);
     return "smtp";
@@ -347,13 +367,14 @@ async function main() {
 
   if (!hasSmtp() && !hasResend()) {
     console.log("[mailer] No mail credentials configured.");
-    console.log("[mailer]   Set PRICEWATCH_SMTP_PASS (Gmail app password)");
-    console.log("[mailer]   or  RESEND_API_KEY");
+    console.log("[mailer]   Set RESEND_API_KEY (preferred for §8.1)");
+    console.log("[mailer]   or  PRICEWATCH_SMTP_PASS (Gmail app password)");
     console.log("[mailer] Exiting with code 7 (no credentials).");
     process.exit(7);
   }
 
-  console.log(`[mailer] Transport: ${hasSmtp() ? "SMTP" : "Resend"}`);
+  const transport = (preferResend() && hasResend()) ? "resend" : hasSmtp() ? "smtp" : "resend";
+  console.log(`[mailer] Transport: ${transport}${MAIL_TRANSPORT ? ` (forced via PRICEWATCH_MAIL_TRANSPORT=${MAIL_TRANSPORT})` : ""}`);
   console.log(`[mailer] From: ${MAIL_FROM}`);
   console.log(`[mailer] Reply-To: ${REPLY_TO}`);
 
