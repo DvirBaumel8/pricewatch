@@ -5,4 +5,7 @@ outbox/
 data/snapshots.local.json
 data/snapshots/*.json
 !data/snapshots/.gitkeep
+data/queue.json
+data/queue.json.bak
+data/customers.json
 lab/price.json.bak
