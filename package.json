@@ -15,11 +15,13 @@
     "enqueue-daily": "node scripts/enqueue-daily-ticks.js",
     "service-c": "node scripts/run-monitor-worker.js",
     "service-c:watch": "node scripts/run-monitor-worker.js --watch",
-    "test": "node test/test-queue.js && node test/test-slack-extractor.js && node test/test-blocked-detection.js",
+    "test": "node test/test-queue.js && node test/test-slack-extractor.js && node test/test-blocked-detection.js && node test/test-email-format.js",
     "test:queue": "node test/test-queue.js",
     "test:e2e": "node test/test-service-ab.js",
     "test:e2e:c": "node test/test-service-c.js",
-    "test:offline": "bash scripts/test-7.2-offline.sh"
+    "test:e2e:mailer": "node test/test-mailer.js",
+    "test:offline": "bash scripts/test-7.2-offline.sh",
+    "send-outbox": "node scripts/send-outbox.js"
   },
   "repository": {
     "type": "git",
