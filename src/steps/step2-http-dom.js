@@ -129,21 +129,65 @@ const extractors = {
   "slack.com": {
     extract(html, target) {
       // Slack SSR renders plan cards with class "plan-type--pro".
-      // Inside the Pro card, the standard monthly price is in a
-      // <span class="v--strikeprice">$8.75</span> (struck through for promo).
-      // The promo price is in <span class="plan-emphasized-rate">$4.38…</span>.
-      // The term text: "per user / month, when paying monthly"
-      //
-      // We extract the strikeprice (standard monthly), NOT the promo.
+      // Primary: strikeprice span (standard monthly during promo periods).
+      // Fallbacks for when the promo layout is removed.
 
       const proIdx = html.indexOf('plan-type--pro');
       if (proIdx === -1) return null;
-      const chunk = html.slice(proIdx, proIdx + 3000);
+      const chunk = html.slice(proIdx, proIdx + 5000);
 
+      let standardPrice = null;
+      let method = null;
+
+      // Strategy A: promo layout with v--strikeprice
       const strikeMatch = chunk.match(/v--strikeprice">\$(\d+(?:\.\d{1,2})?)</);
-      if (!strikeMatch) return null;
+      if (strikeMatch) {
+        standardPrice = Number(strikeMatch[1]);
+        method = "strikeprice";
+      }
 
-      const standardPrice = Number(strikeMatch[1]);
+      // Strategy B: labeled monthly rate near "per user" / "per month" / "monthly"
+      if (standardPrice === null) {
+        const rateMatch = chunk.match(
+          /(?:plan-(?:emphasized-)?rate|price-value|pricing-amount)[^>]*>\s*\$(\d+(?:\.\d{1,2})?)/
+        );
+        if (rateMatch) {
+          const candidate = Number(rateMatch[1]);
+          const hasMonthlyBilling = /when paying monthly|billed monthly/i.test(chunk);
+          if (hasMonthlyBilling && candidate > 4 && candidate < 20) {
+            standardPrice = candidate;
+            method = "rate-class";
+          }
+        }
+      }
+
+      // Strategy C: look for "$8.75" (or a non-promo value) near monthly billing text
+      if (standardPrice === null) {
+        const allPrices = [...chunk.matchAll(/\$(\d+(?:\.\d{1,2})?)/g)];
+        const hasMonthlyBilling = /when paying monthly|billed monthly/i.test(chunk);
+        if (hasMonthlyBilling) {
+          for (const m of allPrices) {
+            const val = Number(m[1]);
+            // Skip annual half-price ($4.38), skip $0, skip high values
+            if (val >= 7 && val <= 15) {
+              standardPrice = val;
+              method = "price-scan";
+              break;
+            }
+          }
+        }
+      }
+
+      // Strategy D: aria-label or data-price attribute
+      if (standardPrice === null) {
+        const ariaMatch = chunk.match(/(?:aria-label|data-price)="[^"]*?\$(\d+(?:\.\d{1,2})?)[^"]*?(?:per\s+user|monthly)/i);
+        if (ariaMatch) {
+          standardPrice = Number(ariaMatch[1]);
+          method = "aria-label";
+        }
+      }
+
+      if (standardPrice === null) return null;
 
       const promoMatch = chunk.match(/plan-emphasized-rate">\$(\d+(?:\.\d{1,2})?)/);
       const promoPrice = promoMatch ? Number(promoMatch[1]) : null;
@@ -151,7 +195,7 @@ const extractors = {
       const termMatch = chunk.match(/term-copy[^>]*>([^<]+)</);
       const termText = termMatch ? termMatch[1].trim() : "";
 
-      let notes = `Standard monthly: $${standardPrice}`;
+      let notes = `Standard monthly: $${standardPrice} (via ${method})`;
       if (promoPrice !== null) {
         notes += `; promo: $${promoPrice} (ignored — 50% off limited-time offer)`;
       }
@@ -164,9 +208,9 @@ const extractors = {
         perUnit: "active user",
         planName: "Pro",
         site: "slack.com",
-        selector: '.plan-type--pro .v--strikeprice',
-        regex: 'plan-type--pro[\\s\\S]{0,1500}v--strikeprice">\\$(\\d+\\.\\d{2})',
-        confidence: "high",
+        selector: method === "strikeprice" ? '.plan-type--pro .v--strikeprice' : `.plan-type--pro (${method})`,
+        regex: 'plan-type--pro[\\s\\S]{0,3000}\\$(\\d+\\.\\d{2}).*?monthly',
+        confidence: method === "strikeprice" ? "high" : "medium",
         notes,
       };
     },

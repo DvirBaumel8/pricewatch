@@ -9,6 +9,7 @@ const path = require("path");
 const SKILLS_DIR = path.resolve(__dirname, "..", "data", "skills");
 const SNAPSHOTS_DIR = path.resolve(__dirname, "..", "data", "snapshots");
 const OUTBOX_DIR = path.resolve(__dirname, "..", "outbox");
+const { looksBlocked } = require("./steps/http-fetch");
 
 function usage() {
   console.error("Usage: node src/monitor.js <skill_id>");
@@ -129,6 +130,7 @@ function priceChanged(prev, curr) {
 }
 
 async function main() {
+  const t0 = Date.now();
   const args = process.argv.slice(2);
   if (args.length < 1) usage();
 
@@ -145,9 +147,20 @@ async function main() {
     `Monitor: checking ${skill.base_url} (skill ${skillId}, method: ${skill.method})`
   );
 
+  const fetchStart = Date.now();
   const res = await httpGet(skill.pricing_url, 15_000);
+  const fetchMs = Date.now() - fetchStart;
   if (res.status !== 200) {
     console.error(`Fetch failed: HTTP ${res.status}`);
+    console.log(`TELEMETRY ${JSON.stringify({ op: "monitor", skillId, status: "fetch_fail", httpStatus: res.status, wallMs: Date.now() - t0 })}`);
+    process.exit(3);
+  }
+  console.log(`TELEMETRY ${JSON.stringify({ op: "monitor_fetch", skillId, fetchMs })}`);
+
+  const blockReason = looksBlocked(res.status, res.body);
+  if (blockReason) {
+    console.error(`Blocked: response looks like a challenge/blocked page (${blockReason})`);
+    console.log(`TELEMETRY ${JSON.stringify({ op: "monitor", skillId, status: "blocked", reason: blockReason, wallMs: Date.now() - t0 })}`);
     process.exit(3);
   }
 
@@ -170,7 +183,9 @@ async function main() {
   if (!lastSnapshot) {
     console.log("  No previous snapshot — saving baseline, no email.");
     saveSnapshot(skillId, currentPrice);
+    const wallMs = Date.now() - t0;
     console.log("RESULT: no_email (first_run)");
+    console.log(`TELEMETRY ${JSON.stringify({ op: "monitor", skillId, method: skill.method, status: "no_email", reason: "first_run", wallMs })}`);
     return;
   }
 
@@ -182,7 +197,9 @@ async function main() {
   if (!priceChanged(prevPrice, currentPrice)) {
     console.log("  Price unchanged — no email.");
     saveSnapshot(skillId, currentPrice);
+    const wallMs = Date.now() - t0;
     console.log("RESULT: no_email");
+    console.log(`TELEMETRY ${JSON.stringify({ op: "monitor", skillId, method: skill.method, status: "no_email", reason: "unchanged", wallMs })}`);
     return;
   }
 
@@ -191,8 +208,10 @@ async function main() {
   );
   const emailPath = writeEmail(skill, prevPrice, currentPrice);
   saveSnapshot(skillId, currentPrice);
+  const wallMs = Date.now() - t0;
   console.log(`  Email written: ${emailPath}`);
   console.log("RESULT: email_sent");
+  console.log(`TELEMETRY ${JSON.stringify({ op: "monitor", skillId, method: skill.method, status: "email_sent", before: prevPrice.amount, after: currentPrice.amount, wallMs })}`);
 }
 
 main().catch((err) => {

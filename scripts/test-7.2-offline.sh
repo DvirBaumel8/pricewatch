@@ -8,6 +8,13 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 LAB_PORT=0
 LAB_PID=""
 
+KEEP_ARTIFACTS="${KEEP_ARTIFACTS:-0}"
+for arg in "$@"; do
+  case "$arg" in
+    --keep-artifacts) KEEP_ARTIFACTS=1 ;;
+  esac
+done
+
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 BOLD='\033[1m'
@@ -22,7 +29,11 @@ cleanup() {
   if [ -f "$ROOT/lab/price.json.bak" ]; then
     mv "$ROOT/lab/price.json.bak" "$ROOT/lab/price.json"
   fi
-  rm -rf "$ROOT/data/skills" "$ROOT/data/snapshots" "$ROOT/outbox"
+  if [ "$KEEP_ARTIFACTS" = "1" ]; then
+    echo "  --keep-artifacts: preserving data/skills, data/snapshots, outbox"
+  else
+    rm -rf "$ROOT/data/skills" "$ROOT/data/snapshots" "$ROOT/outbox"
+  fi
 }
 trap cleanup EXIT
 
@@ -53,7 +64,11 @@ LAB_URL="http://127.0.0.1:${LAB_PORT}"
 echo -e "${BOLD}Offline §7.2 test — lab at ${LAB_URL} (pid $LAB_PID)${RESET}\n"
 
 # Delegate to the main test script
-"$ROOT/scripts/run-7.2.sh" "$LAB_URL"
+KEEP_ARTIFACTS_ARG=""
+if [ "$KEEP_ARTIFACTS" = "1" ]; then
+  KEEP_ARTIFACTS_ARG="--keep-artifacts"
+fi
+KEEP_ARTIFACTS="$KEEP_ARTIFACTS" "$ROOT/scripts/run-7.2.sh" "$LAB_URL" $KEEP_ARTIFACTS_ARG
 EXIT_CODE=$?
 
 exit $EXIT_CODE

@@ -1,9 +1,9 @@
 {
   "id": "slack-com-f0f9c5de",
-  "version": 1,
+  "version": 2,
   "created_at": "2026-09-21T23:42:34.859Z",
   "pricing_url": "https://slack.com/pricing",
-  "target_price_description": "Pro plan .75 per active user per month when paying monthly",
+  "target_price_description": "Pro plan $8.75 per active user per month when paying monthly",
   "site": "slack.com",
   "plan_name": "Pro",
   "method": "dom",
@@ -12,10 +12,10 @@
   "currency": "USD",
   "period": "month",
   "per_unit": "active user",
-  "selector": ".plan-type--pro .v--strikeprice",
-  "regex": "plan-type--pro[\\s\\S]{0,1500}v--strikeprice\">\\$(\\d+\\.\\d{2})",
+  "selector": ".plan-type--pro .v--strikeprice | .plan-type--pro (rate-class) | .plan-type--pro (price-scan)",
+  "regex": "plan-type--pro[\\s\\S]{0,3000}\\$(\\d+\\.\\d{2}).*?monthly",
   "json_path": null,
   "confidence": "high",
   "failure_count": 0,
-  "notes": "Standard monthly: $8.75; promo: $4.38 (ignored — 50% off limited-time offer); term: \"per user / month, when paying monthly\""
+  "notes": "Standard monthly: $8.75 (via strikeprice); fallbacks: rate-class, price-scan, aria-label for when promo layout is removed. Promo $4.38 and annual half-price are excluded."
 }

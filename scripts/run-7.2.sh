@@ -10,6 +10,13 @@ LAB_URL="${1:-http://127.0.0.1:3847}"
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 TARGET="main monthly price"
 
+KEEP_ARTIFACTS="${KEEP_ARTIFACTS:-0}"
+for arg in "$@"; do
+  case "$arg" in
+    --keep-artifacts) KEEP_ARTIFACTS=1 ;;
+  esac
+done
+
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 BOLD='\033[1m'
@@ -25,7 +32,11 @@ cleanup() {
     -H 'Content-Type: application/json' \
     -d '{"amount":29}' > /dev/null || echo "  (lab not reachable for reset)"
 
-  rm -rf "$ROOT/data/skills" "$ROOT/data/snapshots" "$ROOT/outbox"
+  if [ "$KEEP_ARTIFACTS" = "1" ]; then
+    echo -e "  ${BOLD}--keep-artifacts: preserving data/skills, data/snapshots, outbox${RESET}"
+  else
+    rm -rf "$ROOT/data/skills" "$ROOT/data/snapshots" "$ROOT/outbox"
+  fi
 }
 trap cleanup EXIT
 
