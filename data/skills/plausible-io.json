@@ -6,16 +6,21 @@
   "target_price_description": "Starter plan monthly USD ~10k pageviews",
   "site": "plausible.io",
   "plan_name": null,
+  "plan_key": null,
   "method": "dom",
-  "step": 0,
-  "price": 9,
-  "currency": "USD",
-  "period": "month",
-  "per_unit": null,
+  "extract_mode": "single",
   "selector": "[x-text*=\"starter\"][x-text*=\"monthly\"]",
   "regex": "price\\(.*?'starter'.*?'monthly'\\).*?\\$(\\d+)",
-  "json_path": null,
-  "confidence": "high",
+  "normalize": {
+    "currency_field": "currency",
+    "period_field": "period"
+  },
   "failure_count": 0,
-  "notes": "reused existing skill"
+  "skill_status": "healthy",
+  "confidence": "high",
+  "notes": "reused existing skill",
+  "currency": "USD",
+  "period": "month",
+  "price": 9,
+  "discovery_step": 0
 }

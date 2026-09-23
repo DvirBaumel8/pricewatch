@@ -6,16 +6,22 @@
   "target_price_description": "Pro plan $8.75 per active user per month when paying monthly",
   "site": "slack.com",
   "plan_name": "Pro",
+  "plan_key": "Pro",
   "method": "dom",
-  "step": 2,
-  "price": 8.75,
+  "extract_mode": "single",
+  "selector": ".plan-type--pro .v--strikeprice | .plan-type--pro (rate-class) | .plan-type--pro (price-scan)",
+  "regex": "plan-type--pro[\\s\\S]{0,3000}\\$(\\d+\\.\\d{2}).*?monthly",
+  "normalize": {
+    "currency_field": "currency",
+    "period_field": "period"
+  },
+  "failure_count": 0,
+  "skill_status": "healthy",
+  "confidence": "high",
+  "notes": "Standard monthly: $8.75 (via strikeprice); fallbacks: rate-class, price-scan, aria-label for when promo layout is removed. Promo $4.38 and annual half-price are excluded.",
   "currency": "USD",
   "period": "month",
   "per_unit": "active user",
-  "selector": ".plan-type--pro .v--strikeprice | .plan-type--pro (rate-class) | .plan-type--pro (price-scan)",
-  "regex": "plan-type--pro[\\s\\S]{0,3000}\\$(\\d+\\.\\d{2}).*?monthly",
-  "json_path": null,
-  "confidence": "high",
-  "failure_count": 0,
-  "notes": "Standard monthly: $8.75 (via strikeprice); fallbacks: rate-class, price-scan, aria-label for when promo layout is removed. Promo $4.38 and annual half-price are excluded."
+  "price": 8.75,
+  "discovery_step": 2
 }

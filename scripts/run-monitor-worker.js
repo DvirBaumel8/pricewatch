@@ -62,12 +62,20 @@ async function processTick(tick) {
     console.log(`  [C] Result: ${result.status}`);
 
     if (result.status === "price_changed") {
-      console.log(`  [C] PRICE CHANGED: ${result.before.amount} → ${result.after.amount}`);
+      if (result.before && result.after) {
+        console.log(`  [C] PRICE CHANGED: ${result.before.amount} → ${result.after.amount}`);
+      } else if (result.changes) {
+        console.log(`  [C] PLANS CHANGED: ${result.changes.length} signal(s)`);
+      } else {
+        console.log(`  [C] PRICE CHANGED`);
+      }
       console.log(`  [C] Email written: ${result.emailPath}`);
       monitorQueue.complete(tick.id, {
         status: "done",
         result: "price_changed",
-        reason: `${result.before.amount} → ${result.after.amount}`,
+        reason: result.before && result.after
+          ? `${result.before.amount} → ${result.after.amount}`
+          : result.reason || "plans_signal",
       });
     } else if (result.status === "no_email") {
       console.log(`  [C] No email: ${result.reason}`);

@@ -182,6 +182,7 @@ async function runLabDiscovery(baseUrl, targetDesc) {
     target_price_description: targetDesc,
     discovery_step: step,
     method: result.method,
+    extract_mode: "single",
     pricing_url: result.pricing_url,
     confidence: result.method === "api" ? 0.99 : 0.9,
     ...(result.json_path && { json_path: result.json_path }),
@@ -195,6 +196,8 @@ async function runLabDiscovery(baseUrl, targetDesc) {
         : "$.period",
     },
     initial_price: result.extracted,
+    failure_count: 0,
+    skill_status: "healthy",
   };
 
   fs.mkdirSync(SKILLS_DIR, { recursive: true });

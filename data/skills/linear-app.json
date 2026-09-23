@@ -6,16 +6,22 @@
   "target_price_description": "Basic plan per user monthly USD",
   "site": "linear.app",
   "plan_name": "Basic",
+  "plan_key": "Basic",
   "method": "dom",
-  "step": 2,
-  "price": 10,
+  "extract_mode": "single",
+  "selector": "#basic [class*=\"visuallyHidden\"], #basic [aria-label*=\"per user/month\"]",
+  "regex": "id=\"basic\".*?\\$(\\d+)\\s+per\\s+user/month",
+  "normalize": {
+    "currency_field": "currency",
+    "period_field": "period"
+  },
+  "failure_count": 0,
+  "skill_status": "healthy",
+  "confidence": "high",
+  "notes": "Extracted from visually-hidden span near #basic section; page says 'Billed yearly'",
   "currency": "USD",
   "period": "month",
   "per_unit": "user",
-  "selector": "#basic [class*=\"visuallyHidden\"], #basic [aria-label*=\"per user/month\"]",
-  "regex": "id=\"basic\".*?\\$(\\d+)\\s+per\\s+user/month",
-  "json_path": null,
-  "confidence": "high",
-  "failure_count": 0,
-  "notes": "Extracted from visually-hidden span near #basic section; page says 'Billed yearly'"
+  "price": 10,
+  "discovery_step": 2
 }

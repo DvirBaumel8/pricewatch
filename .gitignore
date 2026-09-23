@@ -15,3 +15,4 @@ data/customers.json
 data/monitor-ticks.json
 data/KILL
 lab/price.json.bak
+data/rediscovery-queue.json

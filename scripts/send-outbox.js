@@ -10,6 +10,8 @@
  * Idempotent: each outbox file gets a sidecar ".sent" after successful send.
  * Re-runs skip already-sent files. Outbox JSON is kept for audit trail.
  *
+ * Kill switch: data/KILL or PRICEWATCH_KILL=1 → no-op (exit 0, nothing sent).
+ *
  * Exit codes:
  *   0 — success (includes "nothing to send" and "no credentials" no-op)
  *   1 — unexpected error
@@ -39,6 +41,13 @@ const crypto = require("crypto");
 
 const OUTBOX_DIR = path.resolve(__dirname, "..", "outbox");
 const SENT_DIR = path.join(OUTBOX_DIR, "sent");
+const KILL_FILE = path.resolve(__dirname, "..", "data", "KILL");
+
+function isKilled() {
+  if (process.env.PRICEWATCH_KILL === "1") return true;
+  if (fs.existsSync(KILL_FILE)) return true;
+  return false;
+}
 
 const SMTP_HOST = process.env.PRICEWATCH_SMTP_HOST || "smtp.gmail.com";
 const SMTP_PORT = parseInt(process.env.PRICEWATCH_SMTP_PORT || "587", 10);
@@ -300,6 +309,11 @@ function resolveSubject(email) {
 }
 
 async function drainOutbox() {
+  if (isKilled()) {
+    console.log("[mailer] Kill switch active — drain no-op.");
+    return { sent: 0, skipped: 0, errors: 0, killed: true };
+  }
+
   fs.mkdirSync(OUTBOX_DIR, { recursive: true });
   fs.mkdirSync(SENT_DIR, { recursive: true });
 
@@ -365,6 +379,11 @@ async function drainOutbox() {
 async function main() {
   console.log(`[mailer] ${new Date().toISOString()}`);
 
+  if (isKilled()) {
+    console.log("[mailer] Kill switch active — no-op (nothing sent).");
+    return;
+  }
+
   if (!hasSmtp() && !hasResend()) {
     console.log("[mailer] No mail credentials configured.");
     console.log("[mailer]   Set RESEND_API_KEY (preferred for §8.1)");
@@ -388,7 +407,7 @@ async function main() {
   }
 }
 
-module.exports = { drainOutbox, sendEmail, markSent, isSent, OUTBOX_DIR, SENT_DIR };
+module.exports = { drainOutbox, sendEmail, markSent, isSent, isKilled, OUTBOX_DIR, SENT_DIR, KILL_FILE };
 
 if (require.main === module) {
   main().catch((err) => {
