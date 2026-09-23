@@ -11,7 +11,6 @@
 |------------|-------------------------------------------------|----------------------|
 | **Test**   | `npm ci` then `npm test` (unit / offline tests) | **Yes**              |
 | **Lint**   | `npm run lint` — `node --check` syntax check on all JS source files | **Yes** |
-| **Security** | `npm audit --audit-level=high`                | **Yes**              |
 
 ### Notes
 
@@ -19,9 +18,9 @@
   needed — tests do not connect to Neon.
 - **Lint** currently uses `node --check` for syntax validation. When
   ESLint is added later, update the `lint` script in `package.json`.
-- **Security** runs `npm audit`. With minimal dependencies this may
-  report zero issues; the job still runs so future dependency additions
-  are checked automatically.
+- **Security** was removed from CI. Day-to-day `npm audit` in PR checks
+  added noise without meaningful protection. Real security hardening is
+  tracked in pre-prod backlog item PP-1 (harden + review).
 
 ## Required status checks (Chris — merge gate)
 
@@ -34,11 +33,10 @@ protection on `main`:
 4. Search and select these check names:
    - `Test`
    - `Lint`
-   - `Security audit`
 5. Optionally enable **Require branches to be up to date before merging**
 6. Save changes
 
-After this, PRs cannot merge while any of these three jobs is red.
+After this, PRs cannot merge while either of these two jobs is red.
 
 ## No DATABASE_URL in CI
 
