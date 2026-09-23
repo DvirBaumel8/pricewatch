@@ -33,7 +33,8 @@
     "migrate:up": "node-pg-migrate up --migration-file-language js --migrations-dir migrations --database-url-var DATABASE_URL",
     "migrate:down": "node-pg-migrate down --migration-file-language js --migrations-dir migrations --database-url-var DATABASE_URL",
     "lint": "node --check src/*.js src/steps/*.js scripts/*.js lab/*.js test/*.js",
-    "lint:syntax": "node --check src/*.js src/steps/*.js scripts/*.js lab/*.js test/*.js"
+    "lint:syntax": "node --check src/*.js src/steps/*.js scripts/*.js lab/*.js test/*.js",
+    "test:watch-target": "node test/test-watch-target.js"
   },
   "repository": {
     "type": "git",
