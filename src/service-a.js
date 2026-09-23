@@ -4,8 +4,15 @@
 /**
  * Service A — thin HTTP API for customer + WatchTarget management.
  *
- * Endpoints:
- *   POST /customers                         → create customer (Neon when pool set)
+ * Public routes (no auth):
+ *   GET  /health                            → health check
+ *   POST /auth/login                        → Google OAuth login (or stub)
+ *
+ * Protected routes (require Bearer JWT):
+ *   GET  /auth/me                           → current user
+ *   POST /auth/notify-email                 → set notify email
+ *   POST /auth/verify-notify-email          → consume verify token
+ *   POST /customers                         → create customer
  *   POST /customers/:id/watch-targets       → create WatchTarget
  *   POST /watch-targets                     → create WatchTarget (body.customer_id)
  *   GET  /watch-targets/:id                 → WatchTarget by id
@@ -16,13 +23,14 @@
  *   GET  /jobs                              → list onboarding jobs
  *   GET  /jobs/:id                          → job detail
  *
- * Auth/billing: stubbed (no Stripe — out of scope for F2).
- * See docs/watch-target.md for competitor ↔ WatchTarget mapping.
+ * See docs/f5-auth.md for env vars, stub vs real OAuth, and route details.
  */
 const http = require("http");
 const customers = require("./customer-store");
 const watchTargets = require("./watch-target-store");
 const queue = require("./queue");
+const auth = require("./auth");
+const userStore = require("./user-store");
 
 const PORT = parseInt(process.env.SERVICE_A_PORT || "3850", 10);
 const HOST = process.env.SERVICE_A_HOST || "127.0.0.1";
@@ -47,10 +55,34 @@ function json(res, status, data) {
   res.end(JSON.stringify(data, null, 2) + "\n");
 }
 
-function matchRoute(method, url) {
-  const [path] = url.split("?");
-  const parts = path.replace(/^\/+|\/+$/g, "").split("/").filter(Boolean);
+const PUBLIC_HANDLERS = new Set(["health", "authLogin"]);
 
+const NOTIFY_GATED_HANDLERS = new Set([
+  "createCustomer",
+  "createWatchTargetForCustomer",
+  "createWatchTarget",
+  "addCompetitor",
+]);
+
+function matchRoute(method, url) {
+  const [pathStr] = url.split("?");
+  const parts = pathStr.replace(/^\/+|\/+$/g, "").split("/").filter(Boolean);
+
+  if (method === "GET" && (parts.length === 0 || (parts.length === 1 && parts[0] === "health"))) {
+    return { handler: "health" };
+  }
+  if (method === "POST" && parts[0] === "auth" && parts[1] === "login" && parts.length === 2) {
+    return { handler: "authLogin" };
+  }
+  if (method === "GET" && parts[0] === "auth" && parts[1] === "me" && parts.length === 2) {
+    return { handler: "authMe" };
+  }
+  if (method === "POST" && parts[0] === "auth" && parts[1] === "notify-email" && parts.length === 2) {
+    return { handler: "setNotifyEmail" };
+  }
+  if (method === "POST" && parts[0] === "auth" && parts[1] === "verify-notify-email" && parts.length === 2) {
+    return { handler: "verifyNotifyEmail" };
+  }
   if (method === "POST" && parts[0] === "customers" && parts.length === 1) {
     return { handler: "createCustomer" };
   }
@@ -112,12 +144,100 @@ async function handleRequest(req, res) {
   }
 
   try {
+    await auth.extractUser(req);
+
+    if (!PUBLIC_HANDLERS.has(route.handler) && !auth.getUser(req)) {
+      return json(res, 401, { error: "Authentication required" });
+    }
+
+    if (NOTIFY_GATED_HANDLERS.has(route.handler)) {
+      const user = auth.getUser(req);
+      if (user && !userStore.isNotifyVerified(user)) {
+        return json(res, 403, {
+          error: "Notify email must be verified before creating watches",
+          reason: "notify_email_unverified",
+        });
+      }
+    }
+
     switch (route.handler) {
+      case "health": {
+        return json(res, 200, {
+          status: "ok",
+          service: "pricewatch-api",
+          neon: watchTargets.dbAvailable() ? "connected" : "unavailable",
+          auth_mode: auth.isStub() ? "stub" : "google",
+        });
+      }
+
+      case "authLogin": {
+        const body = await readBody(req);
+        const result = await auth.login(body);
+        console.log(`[A] User login: ${result.user.id} (${result.user.email})`);
+        return json(res, 200, { user: result.user, token: result.token });
+      }
+
+      case "authMe": {
+        const user = auth.getUser(req);
+        return json(res, 200, {
+          user,
+          notify_verified: userStore.isNotifyVerified(user),
+        });
+      }
+
+      case "setNotifyEmail": {
+        const body = await readBody(req);
+        const user = auth.getUser(req);
+        if (!body.notify_email) {
+          return json(res, 400, { error: "notify_email is required" });
+        }
+
+        const { user: updated, needsVerification } = await userStore.setNotifyEmail(
+          user.id,
+          body.notify_email
+        );
+
+        let verifyToken = null;
+        if (needsVerification) {
+          verifyToken = await userStore.createVerifyToken(user.id);
+        }
+
+        return json(res, 200, {
+          user: updated,
+          notify_verified: userStore.isNotifyVerified(updated),
+          needs_verification: needsVerification,
+          verify_token: verifyToken,
+        });
+      }
+
+      case "verifyNotifyEmail": {
+        const body = await readBody(req);
+        if (!body.token) {
+          return json(res, 400, { error: "token is required" });
+        }
+
+        const result = await userStore.consumeVerifyToken(body.token);
+        if (!result.verified) {
+          return json(res, 400, {
+            error: "Verification failed",
+            reason: result.reason,
+          });
+        }
+
+        return json(res, 200, {
+          verified: true,
+          user: result.user,
+          notify_verified: userStore.isNotifyVerified(result.user),
+        });
+      }
+
       case "createCustomer": {
         const body = await readBody(req);
+        const user = auth.getUser(req);
         const customer = await customers.createCustomer({
           name: body.name,
           email: body.email,
+          user_id: user ? user.id : undefined,
         });
         console.log(`[A] Created customer ${customer.id}: ${customer.name}`);
         return json(res, 201, customer);
@@ -294,7 +414,6 @@ async function createWatchTargetInternal(customerId, body) {
   }
 
   if (!watchTargets.dbAvailable()) {
-    // File-only: use competitor path (no Neon)
     const result = await customers.addCompetitor(customerId, {
       name: label,
       pricingUrl: source_url,
@@ -329,7 +448,6 @@ async function createWatchTargetInternal(customerId, body) {
     };
   }
 
-  // Ensure customer row in Neon (may only exist in file)
   await customers.neonUpsertCustomer({
     id: customer.id,
     name: customer.name,
@@ -353,10 +471,8 @@ async function createWatchTargetInternal(customerId, body) {
     };
   }
 
-  // Dual-write competitor into file JSON (same id) for Service B readers
   dualWriteCompetitorFile(customerId, customer, created.watchTarget);
 
-  // Enqueue onboarding for b2b (same as competitor path)
   let enqueueResult = null;
   if (surface === "b2b") {
     enqueueResult = queue.enqueue({
@@ -412,21 +528,30 @@ function dualWriteCompetitorFile(customerId, customerMeta, wt) {
   fs.writeFileSync(STORE_FILE, JSON.stringify(store, null, 2) + "\n");
 }
 
-const server = http.createServer(handleRequest);
+if (require.main === module) {
+  const server = http.createServer(handleRequest);
+  server.listen(PORT, HOST, () => {
+    console.log(`[Service A] listening on http://${HOST}:${PORT}/`);
+    console.log(`  GET  /health                          → health check (public)`);
+    console.log(`  POST /auth/login                      → login (public)`);
+    console.log(`  GET  /auth/me                         → current user`);
+    console.log(`  POST /auth/notify-email               → set notify email`);
+    console.log(`  POST /auth/verify-notify-email        → verify notify email`);
+    console.log(`  POST /customers                       → create customer`);
+    console.log(`  POST /customers/:id/watch-targets     → create WatchTarget`);
+    console.log(`  POST /watch-targets                   → create WatchTarget`);
+    console.log(`  GET  /watch-targets/:id               → get WatchTarget`);
+    console.log(`  GET  /customers/:id/watch-targets     → list WatchTargets`);
+    console.log(`  POST /customers/:id/competitors       → shim → WatchTarget b2b`);
+    console.log(`  GET  /customers/:id                   → customer detail`);
+    console.log(`  GET  /customers                       → list customers`);
+    console.log(`  GET  /jobs                            → list jobs`);
+    console.log(`  GET  /jobs/:id                        → job detail`);
+    console.log(`  Auth: ${auth.isStub() ? "STUB (AUTH_STUB=1)" : "Google OAuth"}`);
+    console.log(
+      `  Neon: ${watchTargets.dbAvailable() ? "authoritative" : "unavailable (file fallback)"}`
+    );
+  });
+}
 
-server.listen(PORT, HOST, () => {
-  console.log(`[Service A] listening on http://${HOST}:${PORT}/`);
-  console.log(`  POST /customers                       → create customer`);
-  console.log(`  POST /customers/:id/watch-targets      → create WatchTarget`);
-  console.log(`  POST /watch-targets                    → create WatchTarget`);
-  console.log(`  GET  /watch-targets/:id                → get WatchTarget`);
-  console.log(`  GET  /customers/:id/watch-targets      → list WatchTargets`);
-  console.log(`  POST /customers/:id/competitors        → shim → WatchTarget b2b`);
-  console.log(`  GET  /customers/:id                    → customer detail`);
-  console.log(`  GET  /customers                        → list customers`);
-  console.log(`  GET  /jobs                             → list jobs`);
-  console.log(`  GET  /jobs/:id                         → job detail`);
-  console.log(
-    `  Neon: ${watchTargets.dbAvailable() ? "authoritative" : "unavailable (file fallback)"}`
-  );
-});
+module.exports = { handleRequest, matchRoute, PUBLIC_HANDLERS };
