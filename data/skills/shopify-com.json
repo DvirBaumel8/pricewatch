@@ -6,16 +6,21 @@
   "target_price_description": "Basic plan standard 9 per month",
   "site": "shopify.com",
   "plan_name": "Basic",
+  "plan_key": "Basic",
   "method": "dom",
-  "step": 2,
-  "price": 29,
-  "currency": "USD",
-  "period": "month",
-  "per_unit": null,
+  "extract_mode": "single",
   "selector": ".text-t7 p:first-child + p",
   "regex": "text-t7\"><p>Basic</p><p>[^$]*\\$(\\d+)<small[^>]*>/mo",
-  "json_path": null,
-  "confidence": "high",
+  "normalize": {
+    "currency_field": "currency",
+    "period_field": "period"
+  },
   "failure_count": 0,
-  "notes": "Card heading: Basic $29/mo; yearly row confirms $29 USD/mo; pay-monthly rate: $39 USD/mo (higher, ignored); $1/mo intro promo present on page (ignored)"
+  "skill_status": "healthy",
+  "confidence": "high",
+  "notes": "Card heading: Basic $29/mo; yearly row confirms $29 USD/mo; pay-monthly rate: $39 USD/mo (higher, ignored); $1/mo intro promo present on page (ignored)",
+  "currency": "USD",
+  "period": "month",
+  "price": 29,
+  "discovery_step": 2
 }

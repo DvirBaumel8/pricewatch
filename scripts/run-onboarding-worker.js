@@ -289,6 +289,7 @@ function buildLabSkill(id, baseUrl, target, step, discoveryResult) {
     target_price_description: target,
     discovery_step: step,
     method: discoveryResult.method,
+    extract_mode: "single",
     pricing_url: discoveryResult.pricing_url,
     confidence: discoveryResult.method === "api" ? 0.99 : 0.9,
     ...(discoveryResult.json_path && { json_path: discoveryResult.json_path }),
@@ -302,6 +303,8 @@ function buildLabSkill(id, baseUrl, target, step, discoveryResult) {
         : "$.period",
     },
     initial_price: discoveryResult.extracted,
+    failure_count: 0,
+    skill_status: "healthy",
   };
 }
 

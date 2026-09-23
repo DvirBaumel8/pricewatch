@@ -6,16 +6,23 @@
   "target_price_description": "Pro plan 0 per developer seat per month",
   "site": "vercel.com",
   "plan_name": "Pro",
+  "plan_key": "Pro",
   "method": "dom",
-  "step": 2,
-  "price": 20,
-  "currency": "USD",
-  "period": "month",
-  "per_unit": "developer seat",
+  "extract_mode": "single",
   "selector": ".text-heading-32 (near Popular badge)",
   "regex": "planPrices.*?pro.*?amount.*?\\$\\$(\\d+)",
   "json_path": "planPrices.pro.amount",
-  "confidence": "high",
+  "normalize": {
+    "currency_field": "$.currency",
+    "period_field": "$.period"
+  },
   "failure_count": 0,
-  "notes": "Embedded RSC JSON: pro.amount=$$20; confirmed by DOM heading near Popular badge; Developer seat row confirms $20/month"
+  "skill_status": "healthy",
+  "confidence": "high",
+  "notes": "Embedded RSC JSON: pro.amount=$$20; confirmed by DOM heading near Popular badge; Developer seat row confirms $20/month",
+  "currency": "USD",
+  "period": "month",
+  "per_unit": "developer seat",
+  "price": 20,
+  "discovery_step": 2
 }

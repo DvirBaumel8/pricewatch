@@ -27,6 +27,7 @@ function saveSkill(data) {
   const fname = skillFilename(data.url || `https://${data.site}`, data.target || "");
   const fpath = path.join(SKILLS_DIR, fname);
 
+  const method = data.method || "dom";
   const skill = {
     id: skillId(data.url || `https://${data.site}`, data.target || ""),
     version: 1,
@@ -34,20 +35,33 @@ function saveSkill(data) {
     pricing_url: data.url,
     target_price_description: data.target,
     site: data.site,
-    plan_name: data.planName,
-    method: data.method,
+    plan_name: data.planName || data.plan_name || null,
+    plan_key: data.planKey || data.plan_key || data.planName || null,
+    method,
+    extract_mode: data.extract_mode || (method === "plans" ? "plans" : "single"),
     step: data.step,
     price: data.price,
     currency: data.currency || "USD",
     period: data.period || "month",
     per_unit: data.perUnit || null,
+    selectors: data.selectors || null,
     selector: data.selector || null,
     regex: data.regex || null,
     json_path: data.jsonPath || null,
+    normalize: data.normalize || null,
     confidence: data.confidence || "medium",
     failure_count: 0,
+    skill_status: "healthy",
     notes: data.notes || null,
   };
+  if (!skill.normalize) {
+    skill.normalize = skill.selectors
+      ? {
+          currency_field: skill.selectors.currency_attr || "data-currency",
+          period_field: skill.selectors.period_attr || "data-period",
+        }
+      : { currency_field: "currency", period_field: "period" };
+  }
 
   fs.writeFileSync(fpath, JSON.stringify(skill, null, 2) + "\n");
   return path.relative(path.join(__dirname, ".."), fpath);

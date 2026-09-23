@@ -6,16 +6,23 @@
   "target_price_description": "Plus plan per member monthly USD",
   "site": "notion.com",
   "plan_name": "Plus",
+  "plan_key": "Plus",
   "method": "dom",
-  "step": 2,
-  "price": 10,
-  "currency": "USD",
-  "period": "month",
-  "per_unit": "member",
+  "extract_mode": "single",
   "selector": ".PricingPlanCard h3:contains(\"Plus\") + .pricingWrap .heading",
   "regex": "heading\">\\s*Plus.*?heading\">\\s*\\$(\\d+)",
   "json_path": "plus.USD.year.unit_amount (÷1200) or plus.USD.month.unit_amount (÷100)",
-  "confidence": "high",
+  "normalize": {
+    "currency_field": "$.currency",
+    "period_field": "$.period"
+  },
   "failure_count": 0,
-  "notes": "Embedded JSON: monthly=12, yearly/12=10; page default shows annual billing; confirmed by DOM heading"
+  "skill_status": "healthy",
+  "confidence": "high",
+  "notes": "Embedded JSON: monthly=12, yearly/12=10; page default shows annual billing; confirmed by DOM heading",
+  "currency": "USD",
+  "period": "month",
+  "per_unit": "member",
+  "price": 10,
+  "discovery_step": 2
 }
