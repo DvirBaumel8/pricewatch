@@ -99,8 +99,8 @@ npx node-pg-migrate up --database-url-var DATABASE_URL_UNPOOLED \
 ## 6. Fail-closed behavior
 
 The app must fail closed (refuse to start DB features) when `DATABASE_URL`
-is not set. Rob will add `src/db.js` with this behavior — a pg Pool
-wrapper that throws immediately if the env var is missing.
+is not set. See `src/db.js` — a pg Pool wrapper that throws when the env
+var is missing if `PRICEWATCH_REQUIRE_DB=1` or `NODE_ENV=production`.
 
 Existing file-based paths (lab, demos) do not need `DATABASE_URL` and
 continue to work without it.
