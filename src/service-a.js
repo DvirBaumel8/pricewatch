@@ -26,9 +26,17 @@
  *   GET  /customers                         → list customers
  *   GET  /jobs                              → list onboarding jobs
  *   GET  /jobs/:id                          → job detail
+ *   GET  /b2c/slots                         → current user slot info
+ *   POST /b2c/payment-stub                  → grant package (PAYMENT_STUB)
+ *   GET  /product-offers                    → list active product offers
+ *   POST /product-offers/seed               → seed stub offers
+ *
+ * Public (no auth):
+ *   GET  /r/:id                             → affiliate redirect (click log + 302)
  *
  * See docs/f5-auth.md for env vars, stub vs real OAuth, and route details.
  * See docs/f4-intake.md for intake preview/confirm details.
+ * See docs/f6-b2c-stubs.md for B2C slot enforcement, payment stub, /r/:id.
  */
 const http = require("http");
 const customers = require("./customer-store");
@@ -37,6 +45,8 @@ const queue = require("./queue");
 const auth = require("./auth");
 const userStore = require("./user-store");
 const intake = require("./intake");
+const productOffers = require("./product-offer-store");
+const slotStore = require("./slot-store");
 
 const PORT = parseInt(process.env.SERVICE_A_PORT || "3850", 10);
 const HOST = process.env.SERVICE_A_HOST || "127.0.0.1";
@@ -61,7 +71,7 @@ function json(res, status, data) {
   res.end(JSON.stringify(data, null, 2) + "\n");
 }
 
-const PUBLIC_HANDLERS = new Set(["health", "authLogin", "intakePreview"]);
+const PUBLIC_HANDLERS = new Set(["health", "authLogin", "intakePreview", "affiliateRedirect"]);
 
 const NOTIFY_GATED_HANDLERS = new Set([
   "createCustomer",
@@ -146,6 +156,21 @@ function matchRoute(method, url) {
   }
   if (method === "GET" && parts[0] === "jobs" && parts.length === 1) {
     return { handler: "listJobs" };
+  }
+  if (method === "GET" && parts[0] === "r" && parts.length === 2) {
+    return { handler: "affiliateRedirect", params: { id: parts[1] } };
+  }
+  if (method === "GET" && parts[0] === "b2c" && parts[1] === "slots" && parts.length === 2) {
+    return { handler: "b2cSlots" };
+  }
+  if (method === "POST" && parts[0] === "b2c" && parts[1] === "payment-stub" && parts.length === 2) {
+    return { handler: "b2cPaymentStub" };
+  }
+  if (method === "GET" && parts[0] === "product-offers" && parts.length === 1) {
+    return { handler: "listProductOffers" };
+  }
+  if (method === "POST" && parts[0] === "product-offers" && parts[1] === "seed" && parts.length === 2) {
+    return { handler: "seedProductOffers" };
   }
   return null;
 }
@@ -344,7 +369,7 @@ async function handleRequest(req, res) {
 
       case "createWatchTargetForCustomer": {
         const body = await readBody(req);
-        const result = await createWatchTargetInternal(route.params.id, body);
+        const result = await createWatchTargetInternal(route.params.id, body, auth.getUser(req));
         return json(res, result.status, result.body);
       }
 
@@ -353,7 +378,7 @@ async function handleRequest(req, res) {
         if (!body.customer_id) {
           return json(res, 400, { error: "customer_id is required" });
         }
-        const result = await createWatchTargetInternal(body.customer_id, body);
+        const result = await createWatchTargetInternal(body.customer_id, body, auth.getUser(req));
         return json(res, result.status, result.body);
       }
 
@@ -465,6 +490,67 @@ async function handleRequest(req, res) {
         return json(res, 200, queue.listJobs());
       }
 
+      case "affiliateRedirect": {
+        const offerId = route.params.id;
+        const offer = await productOffers.getById(offerId);
+        if (!offer || !offer.active) {
+          return json(res, 404, { error: "Product offer not found" });
+        }
+        const redirectUrl = offer.affiliate_url || offer.merchant_url;
+        try {
+          await productOffers.recordClick(offerId, {
+            userId: auth.getUser(req) ? auth.getUser(req).id : null,
+            ip: req.headers["x-forwarded-for"] || req.socket.remoteAddress,
+            userAgent: req.headers["user-agent"],
+          });
+        } catch (e) {
+          console.error(`[A] Click log error for offer ${offerId}: ${e.message}`);
+        }
+        console.log(`[A] Redirect /r/${offerId} → ${redirectUrl}`);
+        res.writeHead(302, { Location: redirectUrl });
+        res.end();
+        return;
+      }
+
+      case "b2cSlots": {
+        const user = auth.getUser(req);
+        const slotInfo = await slotStore.canCreateWatch(user.id);
+        const packages = await slotStore.listPackages(user.id);
+        return json(res, 200, { ...slotInfo, packages });
+      }
+
+      case "b2cPaymentStub": {
+        if (process.env.PAYMENT_STUB !== "1" && process.env.NODE_ENV === "production") {
+          return json(res, 403, {
+            error: "Payment stub disabled in production. Set PAYMENT_STUB=1 for testing.",
+          });
+        }
+        const body = await readBody(req);
+        const user = auth.getUser(req);
+        if (!body.package_type) {
+          return json(res, 400, { error: "package_type is required (pkg_1, pkg_3, pkg_5, pkg_10, unlimited)" });
+        }
+        if (!slotStore.VALID_PACKAGE_TYPES.includes(body.package_type) || body.package_type === "free") {
+          return json(res, 400, {
+            error: `Invalid package_type "${body.package_type}"; valid purchasable: pkg_1, pkg_3, pkg_5, pkg_10, unlimited`,
+          });
+        }
+        const pkg = await slotStore.grantPackage(user.id, body.package_type, "payment_stub");
+        const slotInfo = await slotStore.canCreateWatch(user.id);
+        console.log(`[A] Payment stub: granted ${body.package_type} to user ${user.id}`);
+        return json(res, 201, { package: pkg, slots: slotInfo });
+      }
+
+      case "listProductOffers": {
+        const offers = await productOffers.listActive();
+        return json(res, 200, offers);
+      }
+
+      case "seedProductOffers": {
+        const seeded = await productOffers.seedOffers();
+        return json(res, 201, { seeded: seeded.length, offers: seeded });
+      }
+
       default:
         return json(res, 404, { error: "Not found" });
     }
@@ -477,7 +563,7 @@ async function handleRequest(req, res) {
 /**
  * Create WatchTarget without double-inserting via addCompetitor.
  */
-async function createWatchTargetInternal(customerId, body) {
+async function createWatchTargetInternal(customerId, body, reqUser) {
   const surface = body.surface || "b2b";
   const label = body.label || body.name;
   const source_url =
@@ -505,6 +591,22 @@ async function createWatchTargetInternal(customerId, body) {
         error: "target_description (or target_price_description) is required",
       },
     };
+  }
+
+  if (surface === "b2c" && reqUser && slotStore.dbAvailable()) {
+    const slotCheck = await slotStore.canCreateWatch(reqUser.id);
+    if (!slotCheck.allowed) {
+      return {
+        status: 403,
+        body: {
+          error: "b2c_slots_exhausted",
+          reason: slotCheck.reason,
+          total_slots: slotCheck.total_slots,
+          used_slots: slotCheck.used_slots,
+          remaining: slotCheck.remaining,
+        },
+      };
+    }
   }
 
   const customer = await ensureCustomerExists(customerId);
@@ -551,6 +653,7 @@ async function createWatchTargetInternal(customerId, body) {
     id: customer.id,
     name: customer.name,
     email: customer.email,
+    user_id: reqUser ? reqUser.id : null,
   });
 
   const created = await watchTargets.create({
@@ -650,6 +753,11 @@ if (require.main === module) {
     console.log(`  GET  /customers                       → list customers`);
     console.log(`  GET  /jobs                            → list jobs`);
     console.log(`  GET  /jobs/:id                        → job detail`);
+    console.log(`  GET  /r/:id                           → affiliate redirect (public)`);
+    console.log(`  GET  /b2c/slots                       → B2C slot info`);
+    console.log(`  POST /b2c/payment-stub                → payment stub (test)`);
+    console.log(`  GET  /product-offers                  → list product offers`);
+    console.log(`  POST /product-offers/seed             → seed stub offers`);
     console.log(`  Auth: ${auth.isStub() ? "STUB (AUTH_STUB=1)" : "Google OAuth"}`);
     console.log(
       `  Neon: ${watchTargets.dbAvailable() ? "authoritative" : "unavailable (file fallback)"}`

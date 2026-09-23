@@ -271,6 +271,7 @@ async function confirm(url, selected, userId, customerId, previewResult) {
         id: customer.id,
         name: customer.name,
         email: customer.email,
+        user_id: userId || null,
       });
 
       const result = await watchTargets.create({

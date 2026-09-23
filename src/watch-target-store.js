@@ -21,7 +21,8 @@ const VALID_STATUSES = Object.freeze([
   "needs_ceo",
   "error",
 ]);
-const MAX_WATCH_TARGETS = 10;
+const slotConstants = require("./slot-store");
+const MAX_WATCH_TARGETS = slotConstants.UNLIMITED_SOFT_CAP;
 
 function dbAvailable() {
   return !!getPool();
