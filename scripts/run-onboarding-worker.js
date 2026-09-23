@@ -328,7 +328,7 @@ async function processJob(job) {
       result: "unsupported",
       reason: "no_pricing_url",
     });
-    customerStore.updateCompetitorStatus(job.customerId, job.competitorId, {
+    await customerStore.updateCompetitorStatus(job.customerId, job.competitorId, {
       status: "unsupported",
     });
     return;
@@ -348,7 +348,7 @@ async function processJob(job) {
         reason: `step_${discoveryResult.step}_${discoveryResult.method}`,
         skillPath: discoveryResult.skillPath,
       });
-      customerStore.updateCompetitorStatus(job.customerId, job.competitorId, {
+      await customerStore.updateCompetitorStatus(job.customerId, job.competitorId, {
         status: "skill_ready",
         skillPath: discoveryResult.skillPath,
       });
@@ -362,7 +362,7 @@ async function processJob(job) {
         result: status,
         reason,
       });
-      customerStore.updateCompetitorStatus(job.customerId, job.competitorId, {
+      await customerStore.updateCompetitorStatus(job.customerId, job.competitorId, {
         status,
       });
     }
@@ -373,7 +373,7 @@ async function processJob(job) {
       result: "error",
       reason: err.message,
     });
-    customerStore.updateCompetitorStatus(job.customerId, job.competitorId, {
+    await customerStore.updateCompetitorStatus(job.customerId, job.competitorId, {
       status: "error",
     });
   }
