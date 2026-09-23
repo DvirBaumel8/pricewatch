@@ -15,7 +15,7 @@
     "enqueue-daily": "node scripts/enqueue-daily-ticks.js",
     "service-c": "node scripts/run-monitor-worker.js",
     "service-c:watch": "node scripts/run-monitor-worker.js --watch",
-    "test": "node test/test-queue.js && node test/test-slack-extractor.js && node test/test-blocked-detection.js && node test/test-wedge.js && node test/test-email-format.js && node test/test-w1-spot-check.js",
+    "test": "node test/test-queue.js && node test/test-slack-extractor.js && node test/test-blocked-detection.js && node test/test-wedge.js && node test/test-email-format.js && node test/test-w1-spot-check.js && node test/test-db.js",
     "test:queue": "node test/test-queue.js",
     "test:wedge": "node test/test-wedge.js",
     "test:email": "node test/test-email-format.js",
@@ -29,7 +29,11 @@
     "demo": "node scripts/demo-w6-sell.js",
     "demo:fixture": "node scripts/demo-w6-sell.js --fixture",
     "pick": "node scripts/plan-picker-server.js",
-    "demo-ui": "node scripts/demo-ui-server.js"
+    "demo-ui": "node scripts/demo-ui-server.js",
+    "migrate:up": "node-pg-migrate up --migration-file-language js --migrations-dir migrations --database-url-var DATABASE_URL",
+    "migrate:down": "node-pg-migrate down --migration-file-language js --migrations-dir migrations --database-url-var DATABASE_URL",
+    "lint": "node --check src/*.js src/steps/*.js scripts/*.js lab/*.js test/*.js",
+    "lint:syntax": "node --check src/*.js src/steps/*.js scripts/*.js lab/*.js test/*.js"
   },
   "repository": {
     "type": "git",
@@ -41,5 +45,9 @@
   "bugs": {
     "url": "https://github.com/DvirBaumel8/pricewatch/issues"
   },
-  "homepage": "https://github.com/DvirBaumel8/pricewatch#readme"
+  "homepage": "https://github.com/DvirBaumel8/pricewatch#readme",
+  "dependencies": {
+    "node-pg-migrate": "^9.0.0",
+    "pg": "^8.23.0"
+  }
 }
