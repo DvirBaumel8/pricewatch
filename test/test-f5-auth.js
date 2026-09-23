@@ -289,6 +289,34 @@ async function main() {
         assert(res.body.notify_verified === false, "not verified yet");
       });
 
+      // ── Q6 regression: unverified notify blocks watch create ────────
+
+      await test("Q6 gate: POST /watch-targets returns 403 when notify unverified", async () => {
+        const res = await httpRequest(
+          {
+            ...base, path: "/watch-targets", method: "POST",
+            headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+          },
+          { customer_id: "any", label: "Test", source_url: "http://example.com", target_description: "test" }
+        );
+        assert(res.status === 403, `expected 403, got ${res.status}`);
+        assert(res.body.reason === "notify_email_unverified", `reason=${res.body.reason}`);
+      });
+
+      await test("Q6 gate: POST /customers returns 403 when notify unverified", async () => {
+        const res = await httpRequest(
+          {
+            ...base, path: "/customers", method: "POST",
+            headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+          },
+          { name: "Test Customer", email: "test@example.com" }
+        );
+        assert(res.status === 403, `expected 403, got ${res.status}`);
+        assert(res.body.reason === "notify_email_unverified", `reason=${res.body.reason}`);
+      });
+
+      // ── Now consume token and prove create is allowed ──────────────
+
       await test("consume verify token → notify_verified_at set", async () => {
         const res = await httpRequest(
           {
@@ -323,6 +351,18 @@ async function main() {
         assert(res.body.notify_verified === true, "verified after consume");
       });
 
+      await test("Q6 gate: POST /customers returns 201 after verify consumed", async () => {
+        const res = await httpRequest(
+          {
+            ...base, path: "/customers", method: "POST",
+            headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+          },
+          { name: "Q6 Verify Test Customer", email: "q6test@example.com" }
+        );
+        assert(res.status === 201, `expected 201, got ${res.status}`);
+        assert(res.body.id, "customer has id");
+      });
+
       // Switch back to same email → auto-verified again
       await test("switch back to same-email → re-verified automatically", async () => {
         const res = await httpRequest(
@@ -347,9 +387,12 @@ async function main() {
       skip("GET /auth/me with valid JWT", "DATABASE_URL not set");
       skip("same-email notify auto-verified", "DATABASE_URL not set");
       skip("different-email notify needs verification", "DATABASE_URL not set");
+      skip("Q6 gate: watch-create 403 when notify unverified", "DATABASE_URL not set");
+      skip("Q6 gate: customer-create 403 when notify unverified", "DATABASE_URL not set");
       skip("consume verify token", "DATABASE_URL not set");
       skip("re-consume fails", "DATABASE_URL not set");
       skip("after verify user is notify-verified", "DATABASE_URL not set");
+      skip("Q6 gate: customer-create 201 after verify consumed", "DATABASE_URL not set");
       skip("switch back to same-email re-verified", "DATABASE_URL not set");
       skip("GET /customers with valid JWT returns 200", "DATABASE_URL not set");
     }

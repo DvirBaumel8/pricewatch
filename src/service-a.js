@@ -57,6 +57,13 @@ function json(res, status, data) {
 
 const PUBLIC_HANDLERS = new Set(["health", "authLogin"]);
 
+const NOTIFY_GATED_HANDLERS = new Set([
+  "createCustomer",
+  "createWatchTargetForCustomer",
+  "createWatchTarget",
+  "addCompetitor",
+]);
+
 function matchRoute(method, url) {
   const [pathStr] = url.split("?");
   const parts = pathStr.replace(/^\/+|\/+$/g, "").split("/").filter(Boolean);
@@ -141,6 +148,16 @@ async function handleRequest(req, res) {
 
     if (!PUBLIC_HANDLERS.has(route.handler) && !auth.getUser(req)) {
       return json(res, 401, { error: "Authentication required" });
+    }
+
+    if (NOTIFY_GATED_HANDLERS.has(route.handler)) {
+      const user = auth.getUser(req);
+      if (user && !userStore.isNotifyVerified(user)) {
+        return json(res, 403, {
+          error: "Notify email must be verified before creating watches",
+          reason: "notify_email_unverified",
+        });
+      }
     }
 
     switch (route.handler) {

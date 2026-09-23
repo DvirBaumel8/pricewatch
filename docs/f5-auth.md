@@ -82,6 +82,22 @@ frontend OAuth flow. The server exchanges it with Google for an
 All protected routes return `401` with `{ "error": "Authentication required" }`
 when no valid JWT is present.
 
+### Notify-verified gate (Q6)
+
+In addition to requiring auth, the following mutation routes also require the
+authenticated user's notify email to be verified (`isNotifyVerified`). If not
+verified, they return `403` with `{ "reason": "notify_email_unverified" }`:
+
+- `POST /customers` — create customer
+- `POST /customers/:id/watch-targets` — create WatchTarget
+- `POST /watch-targets` — create WatchTarget
+- `POST /customers/:id/competitors` — add competitor (compat shim)
+
+Future routes (F4 confirm) should also be gated the same way.
+
+Read-only routes (`GET /customers`, `GET /jobs`, etc.) are not gated — they
+only require auth.
+
 ## Notify-Email Verification (Q6 — locked)
 
 **Rule:** Skip verify when notify email equals Google account email;
