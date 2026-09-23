@@ -50,3 +50,12 @@ env:
 ```
 
 Use a dedicated Neon branch for CI to avoid polluting the shared database.
+
+## Continuous deploy (Render)
+
+After CI passes on `main`, the **Deploy to Render** workflow
+(`.github/workflows/deploy-render.yml`) triggers a Render deploy via a
+deploy hook. Deploys only happen when both Test and Lint are green.
+
+See `docs/render-ops.md` for full Render ops documentation, environment
+variable setup, and the deploy hook configuration steps.
