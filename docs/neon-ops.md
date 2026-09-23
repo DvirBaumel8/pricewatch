@@ -65,12 +65,12 @@ DATABASE_URL_UNPOOLED=postgres://user:pass@ep-xxx.region.aws.neon.tech/neondb \
 
 ## 5. Fail-closed behavior
 
-`src/db.js` throws immediately if `DATABASE_URL` is not set when any code
-requests a database connection. This is intentional — the app must not
-silently fall back to some other store when Postgres is expected.
+The app must fail closed (refuse to start DB features) when `DATABASE_URL`
+is not set. Rob will add `src/db.js` with this behavior — a pg Pool
+wrapper that throws immediately if the env var is missing.
 
-Existing file-based paths (lab, demos) do not import `src/db.js` and
-continue to work without `DATABASE_URL`.
+Existing file-based paths (lab, demos) do not need `DATABASE_URL` and
+continue to work without it.
 
 ## 6. Testing migrations on a throwaway Neon branch
 
@@ -88,7 +88,7 @@ This keeps the shared `main` branch clean while validating migrations.
 ## 7. CI and DATABASE_URL
 
 Wave 1 CI does **not** require a live Neon connection. Tests that run in CI
-(`npm test`) are unit/offline tests that do not import `src/db.js`.
+(`npm test`) are unit/offline tests that do not touch the database.
 
 If DB-dependent integration tests are added later, use GitHub Actions secrets
 to inject `DATABASE_URL` for a dedicated Neon branch, or mock the connection.
