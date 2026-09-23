@@ -7,11 +7,15 @@
  * Public routes (no auth):
  *   GET  /health                            → health check
  *   POST /auth/login                        → Google OAuth login (or stub)
+ *   POST /b2b/intake/preview                → intake preview (public, no auth)
  *
  * Protected routes (require Bearer JWT):
  *   GET  /auth/me                           → current user
  *   POST /auth/notify-email                 → set notify email
  *   POST /auth/verify-notify-email          → consume verify token
+ *   POST /b2b/intake/confirm                → intake confirm (JWT + notify verified)
+ *   POST /b2b/intake/selector               → fallback stub (501)
+ *   POST /b2b/intake/manual-seed            → fallback stub (501)
  *   POST /customers                         → create customer
  *   POST /customers/:id/watch-targets       → create WatchTarget
  *   POST /watch-targets                     → create WatchTarget (body.customer_id)
@@ -24,6 +28,7 @@
  *   GET  /jobs/:id                          → job detail
  *
  * See docs/f5-auth.md for env vars, stub vs real OAuth, and route details.
+ * See docs/f4-intake.md for intake preview/confirm details.
  */
 const http = require("http");
 const customers = require("./customer-store");
@@ -31,6 +36,7 @@ const watchTargets = require("./watch-target-store");
 const queue = require("./queue");
 const auth = require("./auth");
 const userStore = require("./user-store");
+const intake = require("./intake");
 
 const PORT = parseInt(process.env.SERVICE_A_PORT || "3850", 10);
 const HOST = process.env.SERVICE_A_HOST || "127.0.0.1";
@@ -55,13 +61,14 @@ function json(res, status, data) {
   res.end(JSON.stringify(data, null, 2) + "\n");
 }
 
-const PUBLIC_HANDLERS = new Set(["health", "authLogin"]);
+const PUBLIC_HANDLERS = new Set(["health", "authLogin", "intakePreview"]);
 
 const NOTIFY_GATED_HANDLERS = new Set([
   "createCustomer",
   "createWatchTargetForCustomer",
   "createWatchTarget",
   "addCompetitor",
+  "intakeConfirm",
 ]);
 
 function matchRoute(method, url) {
@@ -82,6 +89,18 @@ function matchRoute(method, url) {
   }
   if (method === "POST" && parts[0] === "auth" && parts[1] === "verify-notify-email" && parts.length === 2) {
     return { handler: "verifyNotifyEmail" };
+  }
+  if (method === "POST" && parts[0] === "b2b" && parts[1] === "intake" && parts[2] === "preview" && parts.length === 3) {
+    return { handler: "intakePreview" };
+  }
+  if (method === "POST" && parts[0] === "b2b" && parts[1] === "intake" && parts[2] === "confirm" && parts.length === 3) {
+    return { handler: "intakeConfirm" };
+  }
+  if (method === "POST" && parts[0] === "b2b" && parts[1] === "intake" && parts[2] === "selector" && parts.length === 3) {
+    return { handler: "intakeSelector" };
+  }
+  if (method === "POST" && parts[0] === "b2b" && parts[1] === "intake" && parts[2] === "manual-seed" && parts.length === 3) {
+    return { handler: "intakeManualSeed" };
   }
   if (method === "POST" && parts[0] === "customers" && parts.length === 1) {
     return { handler: "createCustomer" };
@@ -228,6 +247,86 @@ async function handleRequest(req, res) {
           verified: true,
           user: result.user,
           notify_verified: userStore.isNotifyVerified(result.user),
+        });
+      }
+
+      case "intakePreview": {
+        const body = await readBody(req);
+        if (!body.url) {
+          return json(res, 400, { error: "url is required" });
+        }
+        const result = await intake.preview(body.url, body.intent_text);
+        if (result.error) {
+          const status = result.error === "url_required" || result.error === "invalid_url" ? 400
+            : result.error === "unsupported_site" ? 422
+            : result.error === "fetch_failed" || result.error.startsWith("fetch_failed") ? 502
+            : 422;
+          return json(res, status, {
+            error: result.error,
+            url: result.url,
+            site: result.site || null,
+          });
+        }
+        return json(res, 200, {
+          candidates: result.candidates,
+          url: result.url,
+          site: result.site,
+          method: result.method,
+          tokens: result.tokens,
+        });
+      }
+
+      case "intakeConfirm": {
+        const body = await readBody(req);
+        if (!body.url) {
+          return json(res, 400, { error: "url is required" });
+        }
+        if (!Array.isArray(body.selected) || body.selected.length === 0) {
+          return json(res, 400, { error: "selected is required — must be an array of { plan_key }" });
+        }
+        if (!body.customer_id) {
+          return json(res, 400, { error: "customer_id is required" });
+        }
+
+        const user = auth.getUser(req);
+
+        const result = await intake.confirm(
+          body.url,
+          body.selected,
+          user.id,
+          body.customer_id
+        );
+
+        if (result.error) {
+          const status = result.error === "customer_not_found" ? 404
+            : result.error === "max_watch_targets_reached" ? 400
+            : result.error === "unsupported_site" ? 422
+            : result.error === "no_candidates" || result.error === "no_matching_plans" ? 422
+            : 400;
+          return json(res, status, { error: result.error, detail: result.detail });
+        }
+
+        console.log(`[A] Intake confirmed ${result.watch_targets.length} plan(s) for customer ${body.customer_id}`);
+
+        return json(res, 201, {
+          watch_targets: result.watch_targets,
+          skills: result.skills,
+          baselines: result.baselines,
+          first_learn: result.first_learn,
+        });
+      }
+
+      case "intakeSelector": {
+        return json(res, 501, {
+          error: "not_implemented",
+          message: "Click-select fallback (POST /b2b/intake/selector) is not yet implemented. TODO: F4 fallback 1 — click the price on a preview.",
+        });
+      }
+
+      case "intakeManualSeed": {
+        return json(res, 501, {
+          error: "not_implemented",
+          message: "Manual seed fallback (POST /b2b/intake/manual-seed) is not yet implemented. TODO: F4 fallback 2 — type plan name + current price + currency + period.",
         });
       }
 
@@ -537,6 +636,10 @@ if (require.main === module) {
     console.log(`  GET  /auth/me                         → current user`);
     console.log(`  POST /auth/notify-email               → set notify email`);
     console.log(`  POST /auth/verify-notify-email        → verify notify email`);
+    console.log(`  POST /b2b/intake/preview               → intake preview (public)`);
+    console.log(`  POST /b2b/intake/confirm               → intake confirm (auth+notify)`);
+    console.log(`  POST /b2b/intake/selector              → selector stub (501)`);
+    console.log(`  POST /b2b/intake/manual-seed           → manual-seed stub (501)`);
     console.log(`  POST /customers                       → create customer`);
     console.log(`  POST /customers/:id/watch-targets     → create WatchTarget`);
     console.log(`  POST /watch-targets                   → create WatchTarget`);

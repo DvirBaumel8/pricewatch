@@ -15,6 +15,26 @@ const LLM_TOKEN_CAP = 8000;
 
 const siteExtractors = {
 
+  "lab-multiplan": {
+    extract(html) {
+      const plans = [];
+      const cardRe = /data-plan-key="([^"]+)"[\s\S]*?class="plan-name">([^<]+)<[\s\S]*?class="plan-price"\s+data-amount="([^"]*)"\s+data-currency="([^"]*)"\s+data-period="([^"]*)"/g;
+      let m;
+      while ((m = cardRe.exec(html)) !== null) {
+        const amount = m[3] === "" ? null : Number(m[3]);
+        plans.push({
+          plan_key: m[1],
+          plan: m[2].trim(),
+          price: amount,
+          currency: m[4] || "USD",
+          unit: null,
+          billing: m[5] || "month",
+        });
+      }
+      return plans.length > 0 ? plans : null;
+    },
+  },
+
   "vercel.com": {
     extract(html) {
       const plans = [];
@@ -412,9 +432,28 @@ async function extractPlanLadder(url) {
     };
   }
 
-  const hostname = new URL(url).hostname.replace(/^www\./, "");
+  const parsed = new URL(url);
+  const hostname = parsed.hostname.replace(/^www\./, "");
+
+  const isLab = (hostname === "127.0.0.1" || hostname === "localhost") &&
+    parsed.pathname === "/pricing";
+  if (isLab) {
+    const plans = siteExtractors["lab-multiplan"].extract(html);
+    if (plans && plans.length > 0) {
+      return {
+        plans,
+        method: "dom",
+        tokens: 0,
+        url,
+        site: "lab-multiplan",
+        wallMs: Date.now() - t0,
+        error: null,
+      };
+    }
+  }
 
   for (const [domain, ext] of Object.entries(siteExtractors)) {
+    if (domain === "lab-multiplan") continue;
     if (hostname === domain || hostname.endsWith("." + domain)) {
       const plans = ext.extract(html);
       if (plans && plans.length > 0) {
@@ -442,8 +481,25 @@ async function extractPlanLadder(url) {
   };
 }
 
+function extractPlansFromHtml(html, hostname, pathname) {
+  const isLab = (hostname === "127.0.0.1" || hostname === "localhost") &&
+    pathname === "/pricing";
+  if (isLab) {
+    return siteExtractors["lab-multiplan"].extract(html);
+  }
+  const normalHost = hostname.replace(/^www\./, "");
+  for (const [domain, ext] of Object.entries(siteExtractors)) {
+    if (domain === "lab-multiplan") continue;
+    if (normalHost === domain || normalHost.endsWith("." + domain)) {
+      return ext.extract(html);
+    }
+  }
+  return null;
+}
+
 module.exports = {
   extractPlanLadder,
+  extractPlansFromHtml,
   siteExtractors,
   LLM_TOKEN_CAP,
 };

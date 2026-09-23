@@ -1,0 +1,34 @@
+{
+  "site": "lab-multiplan",
+  "plans": [
+    {
+      "plan_key": "free",
+      "name": "Free",
+      "price": 0,
+      "currency": "USD",
+      "period": "month"
+    },
+    {
+      "plan_key": "starter",
+      "name": "Starter",
+      "price": 19,
+      "currency": "USD",
+      "period": "month"
+    },
+    {
+      "plan_key": "pro",
+      "name": "Pro",
+      "price": 49,
+      "currency": "USD",
+      "period": "month"
+    },
+    {
+      "plan_key": "enterprise",
+      "name": "Enterprise",
+      "price": null,
+      "currency": "USD",
+      "period": "custom"
+    }
+  ],
+  "updated_at": "2026-09-23T00:00:00.000Z"
+}
