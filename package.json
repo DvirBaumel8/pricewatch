@@ -15,7 +15,7 @@
     "enqueue-daily": "node scripts/enqueue-daily-ticks.js",
     "service-c": "node scripts/run-monitor-worker.js",
     "service-c:watch": "node scripts/run-monitor-worker.js --watch",
-    "test": "node test/test-queue.js && node test/test-slack-extractor.js && node test/test-blocked-detection.js && node test/test-wedge.js && node test/test-email-format.js && node test/test-w1-spot-check.js && node test/test-f3-stabilize.js && AUTH_STUB=1 node test/test-f5-auth.js && AUTH_STUB=1 node test/test-f4-intake.js",
+    "test": "node test/test-queue.js && node test/test-slack-extractor.js && node test/test-blocked-detection.js && node test/test-wedge.js && node test/test-email-format.js && node test/test-w1-spot-check.js && node test/test-f3-stabilize.js && AUTH_STUB=1 node test/test-f5-auth.js && AUTH_STUB=1 node test/test-f4-intake.js && AUTH_STUB=1 node test/test-f6-b2c.js",
     "test:queue": "node test/test-queue.js",
     "test:wedge": "node test/test-wedge.js",
     "test:email": "node test/test-email-format.js",
@@ -38,6 +38,7 @@
     "test:f3": "node test/test-f3-stabilize.js",
     "test:f5": "AUTH_STUB=1 node test/test-f5-auth.js",
     "test:f4": "AUTH_STUB=1 node test/test-f4-intake.js",
+    "test:f6": "AUTH_STUB=1 node test/test-f6-b2c.js",
     "migrate:skills": "node scripts/migrate-skills-schema.js"
   },
   "repository": {
