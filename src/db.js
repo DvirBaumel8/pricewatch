@@ -1,7 +1,7 @@
 /**
  * Neon / Postgres connection helper (F1 — Rob).
  *
- * Pool from DATABASE_URL. Never log the connection string.
+ * Pool from DATABASE_URL, else DATABASE_URL_NODE. Never log the connection string.
  *
  * Fail closed when DATABASE_URL is missing if:
  *   PRICEWATCH_REQUIRE_DB=1  OR  NODE_ENV=production
@@ -23,8 +23,11 @@ function requireDb() {
 }
 
 function getDatabaseUrl() {
-  const url = process.env.DATABASE_URL;
-  if (url && String(url).trim()) return String(url).trim();
+  // Prefer DATABASE_URL; fall back to DATABASE_URL_NODE (shared box secrets).
+  for (const key of ['DATABASE_URL', 'DATABASE_URL_NODE']) {
+    const url = process.env[key];
+    if (url && String(url).trim()) return String(url).trim();
+  }
   return null;
 }
 
@@ -33,8 +36,8 @@ function getPool() {
   if (!url) {
     if (requireDb()) {
       throw new Error(
-        'DATABASE_URL is required (PRICEWATCH_REQUIRE_DB=1 or NODE_ENV=production). ' +
-          'Set it from Neon Connection Details; never commit the value.'
+        'DATABASE_URL or DATABASE_URL_NODE is required (PRICEWATCH_REQUIRE_DB=1 or NODE_ENV=production). ' +
+          'Set from Neon Connection Details; never commit the value.'
       );
     }
     return null;
