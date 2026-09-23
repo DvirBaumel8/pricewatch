@@ -653,6 +653,7 @@ async function createWatchTargetInternal(customerId, body, reqUser) {
     id: customer.id,
     name: customer.name,
     email: customer.email,
+    user_id: reqUser ? reqUser.id : null,
   });
 
   const created = await watchTargets.create({

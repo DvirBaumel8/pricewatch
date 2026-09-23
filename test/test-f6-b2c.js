@@ -226,6 +226,115 @@ async function main() {
     }
   });
 
+  // ── P0 regression: user_id linkage (static analysis, no DB) ────
+
+  console.log("\n--- P0 regression: user_id linkage ---\n");
+
+  await test("createCustomer accepts user_id parameter", () => {
+    const customerStore = require("../src/customer-store");
+    assert(
+      customerStore.createCustomer.length <= 1,
+      "createCustomer should accept a single options object"
+    );
+    const src = require("fs").readFileSync(
+      require("path").join(__dirname, "..", "src", "customer-store.js"),
+      "utf8"
+    );
+    assert(
+      /createCustomer\(\s*\{[^}]*user_id/.test(src),
+      "createCustomer must destructure user_id from its options parameter"
+    );
+  });
+
+  await test("neonUpsertCustomer SQL includes user_id column", () => {
+    const src = require("fs").readFileSync(
+      require("path").join(__dirname, "..", "src", "customer-store.js"),
+      "utf8"
+    );
+    const insertMatch = src.match(/INSERT INTO customers\s*\([^)]+\)/);
+    assert(insertMatch, "INSERT INTO customers not found");
+    assert(
+      insertMatch[0].includes("user_id"),
+      `INSERT INTO customers missing user_id column: ${insertMatch[0]}`
+    );
+  });
+
+  await test("neonUpsertCustomer ON CONFLICT preserves user_id with COALESCE", () => {
+    const src = require("fs").readFileSync(
+      require("path").join(__dirname, "..", "src", "customer-store.js"),
+      "utf8"
+    );
+    assert(
+      /COALESCE\(EXCLUDED\.user_id/.test(src),
+      "ON CONFLICT must COALESCE user_id to preserve existing value"
+    );
+  });
+
+  await test("getUsedSlots joins on customers.user_id", () => {
+    const src = require("fs").readFileSync(
+      require("path").join(__dirname, "..", "src", "slot-store.js"),
+      "utf8"
+    );
+    assert(
+      /c\.user_id\s*=\s*\$1/.test(src),
+      "getUsedSlots must filter by customers.user_id"
+    );
+  });
+
+  await test("service-a createCustomer handler passes user.id as user_id", () => {
+    const src = require("fs").readFileSync(
+      require("path").join(__dirname, "..", "src", "service-a.js"),
+      "utf8"
+    );
+    const createSection = src.substring(
+      src.indexOf('case "createCustomer"'),
+      src.indexOf('case "createCustomer"') + 400
+    );
+    assert(
+      /user_id:\s*user\s*\?\s*user\.id/.test(createSection),
+      "createCustomer handler must pass user_id: user ? user.id"
+    );
+  });
+
+  await test("service-a createWatchTargetInternal passes reqUser.id to neonUpsertCustomer", () => {
+    const src = require("fs").readFileSync(
+      require("path").join(__dirname, "..", "src", "service-a.js"),
+      "utf8"
+    );
+    assert(
+      /neonUpsertCustomer\(\{[^}]*user_id:\s*reqUser/.test(src),
+      "createWatchTargetInternal must pass user_id: reqUser to neonUpsertCustomer"
+    );
+  });
+
+  await test("intake confirm passes userId to neonUpsertCustomer", () => {
+    const src = require("fs").readFileSync(
+      require("path").join(__dirname, "..", "src", "intake.js"),
+      "utf8"
+    );
+    assert(
+      /neonUpsertCustomer\(\{[^}]*user_id:\s*userId/.test(src),
+      "intake.confirm must pass user_id: userId to neonUpsertCustomer"
+    );
+  });
+
+  // ── P1 regression: MAX_WATCH_TARGETS aligned with soft-cap ────
+
+  console.log("\n--- P1 regression: cap alignment ---\n");
+
+  await test("MAX_WATCH_TARGETS equals UNLIMITED_SOFT_CAP (no drift)", () => {
+    const watchTargets = require("../src/watch-target-store");
+    assert(
+      watchTargets.MAX_WATCH_TARGETS === slotStore.UNLIMITED_SOFT_CAP,
+      `MAX_WATCH_TARGETS=${watchTargets.MAX_WATCH_TARGETS} !== UNLIMITED_SOFT_CAP=${slotStore.UNLIMITED_SOFT_CAP}`
+    );
+  });
+
+  await test("MAX_WATCH_TARGETS is 50 (not 10)", () => {
+    const watchTargets = require("../src/watch-target-store");
+    assert(watchTargets.MAX_WATCH_TARGETS === 50, `MAX_WATCH_TARGETS=${watchTargets.MAX_WATCH_TARGETS}`);
+  });
+
   // ── ProductOffer seed data checks ───────────────────────────────
 
   console.log("\n--- ProductOffer seed data ---\n");

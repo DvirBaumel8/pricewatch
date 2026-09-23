@@ -61,28 +61,29 @@ function fileCreateCustomer({ name, email, id }) {
   return store.customers[cid];
 }
 
-async function neonUpsertCustomer({ id, name, email }) {
+async function neonUpsertCustomer({ id, name, email, user_id }) {
   const cid = id || generateId();
   await query(
-    `INSERT INTO customers (id, name, email, created_at)
-     VALUES ($1, $2, $3, now())
+    `INSERT INTO customers (id, name, email, user_id, created_at)
+     VALUES ($1, $2, $3, $4, now())
      ON CONFLICT (id) DO UPDATE SET
        name = EXCLUDED.name,
-       email = COALESCE(EXCLUDED.email, customers.email)
+       email = COALESCE(EXCLUDED.email, customers.email),
+       user_id = COALESCE(EXCLUDED.user_id, customers.user_id)
      RETURNING *`,
-    [cid, name || "Unnamed", email || null]
+    [cid, name || "Unnamed", email || null, user_id || null]
   );
-  return { id: cid, name: name || "Unnamed", email: email || null };
+  return { id: cid, name: name || "Unnamed", email: email || null, user_id: user_id || null };
 }
 
 /**
  * Create customer. Neon authoritative when pool exists; always dual-writes file
  * so lab/Service B file readers keep working until fully migrated.
  */
-async function createCustomer({ name, email }) {
+async function createCustomer({ name, email, user_id }) {
   const id = generateId();
   if (dbAvailable()) {
-    await neonUpsertCustomer({ id, name, email });
+    await neonUpsertCustomer({ id, name, email, user_id });
   }
   const fileCustomer = fileCreateCustomer({ name, email, id });
   return fileCustomer;
