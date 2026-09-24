@@ -1,0 +1,31 @@
+# Render Blueprint — PriceWatch Service A
+# https://render.com/docs/blueprint-spec
+#
+# Secret values are NOT stored here. Set them in Render Dashboard → Environment.
+# autoDeploy is false — deploys are triggered by GitHub Actions after CI passes.
+
+services:
+  - type: web
+    name: pricewatch-api
+    runtime: node
+    buildCommand: npm ci
+    startCommand: bash scripts/render-start.sh
+    healthCheckPath: /health
+    autoDeploy: false
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        sync: false
+      - key: DATABASE_URL_NODE
+        sync: false
+      - key: JWT_SECRET
+        sync: false
+      - key: PRICEWATCH_KILL
+        sync: false
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: GOOGLE_CLIENT_SECRET
+        sync: false
+      - key: GOOGLE_REDIRECT_URI
+        sync: false

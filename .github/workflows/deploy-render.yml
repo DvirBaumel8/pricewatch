@@ -1,0 +1,38 @@
+name: Deploy to Render
+
+on:
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    name: Deploy
+    runs-on: ubuntu-latest
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.head_branch == 'main'
+    steps:
+      - name: Trigger Render deploy hook
+        if: env.RENDER_DEPLOY_HOOK != ''
+        env:
+          RENDER_DEPLOY_HOOK: ${{ secrets.RENDER_DEPLOY_HOOK }}
+        run: |
+          echo "CI passed on main — triggering Render deploy..."
+          curl -sf "$RENDER_DEPLOY_HOOK" || {
+            echo "::error::Render deploy hook request failed"
+            exit 1
+          }
+          echo "Render deploy triggered."
+
+      - name: Skip (no deploy hook configured)
+        if: env.RENDER_DEPLOY_HOOK == ''
+        env:
+          RENDER_DEPLOY_HOOK: ${{ secrets.RENDER_DEPLOY_HOOK }}
+        run: |
+          echo "RENDER_DEPLOY_HOOK secret is not set — skipping deploy."
+          echo "To enable CD, add the Render deploy hook URL as a GitHub Actions secret."
