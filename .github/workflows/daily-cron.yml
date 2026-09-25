@@ -1,0 +1,86 @@
+name: Daily Cron
+
+# Schedule: 03:00 UTC daily
+#   = 06:00 Asia/Jerusalem in summer (IDT, UTC+3)
+#   = 05:00 Asia/Jerusalem in winter (IST, UTC+2)
+# Israel switches DST in late March and back in late October; the UTC
+# schedule stays fixed — only the local wall-clock time shifts by 1 h.
+# GitHub may delay scheduled runs by a few minutes — acceptable.
+
+on:
+  schedule:
+    - cron: "0 3 * * *"
+  workflow_dispatch:     # manual one-shot trigger for proof / re-gate
+
+permissions:
+  contents: read
+
+jobs:
+  daily-pipeline:
+    name: Daily pipeline
+    runs-on: ubuntu-latest
+
+    # ── Disarm guard ─────────────────────────────────────────────
+    # The job succeeds immediately when PRICEWATCH_CRON_ARMED is not
+    # set to "1". This prevents live sends on first merge.
+    #
+    # To arm:
+    #   GitHub → repo Settings → Secrets and variables → Actions →
+    #   Variables (or Secrets) → New → Name: PRICEWATCH_CRON_ARMED
+    #   Value: 1
+    #
+    # Until armed, every scheduled and manual run logs "disarmed" and
+    # exits cleanly (green check, zero side-effects).
+
+    steps:
+      - name: Check arm status
+        id: arm
+        env:
+          ARMED: ${{ vars.PRICEWATCH_CRON_ARMED }}
+        run: |
+          if [ "$ARMED" != "1" ]; then
+            echo "disarmed — skip"
+            echo "PRICEWATCH_CRON_ARMED is not set to 1."
+            echo "The daily pipeline is disarmed. No enqueue, no monitor, no mail."
+            echo "To arm: set the GitHub Actions variable PRICEWATCH_CRON_ARMED to 1."
+            echo "armed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "PRICEWATCH_CRON_ARMED=1 — pipeline is armed."
+            echo "armed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Checkout
+        if: steps.arm.outputs.armed == 'true'
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        if: steps.arm.outputs.armed == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+
+      - name: Install dependencies
+        if: steps.arm.outputs.armed == 'true'
+        run: npm ci
+
+      - name: Run daily pipeline
+        if: steps.arm.outputs.armed == 'true'
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          DATABASE_URL_NODE: ${{ secrets.DATABASE_URL_NODE }}
+          PRICEWATCH_KILL: ${{ secrets.PRICEWATCH_KILL }}
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+          PRICEWATCH_MAIL_FROM: ${{ secrets.PRICEWATCH_MAIL_FROM }}
+          PRICEWATCH_MAIL_REPLY_TO: ${{ secrets.PRICEWATCH_MAIL_REPLY_TO }}
+          PRICEWATCH_MAIL_TRANSPORT: ${{ secrets.PRICEWATCH_MAIL_TRANSPORT }}
+          PRICEWATCH_SMTP_HOST: ${{ secrets.PRICEWATCH_SMTP_HOST }}
+          PRICEWATCH_SMTP_PORT: ${{ secrets.PRICEWATCH_SMTP_PORT }}
+          PRICEWATCH_SMTP_USER: ${{ secrets.PRICEWATCH_SMTP_USER }}
+          PRICEWATCH_SMTP_PASS: ${{ secrets.PRICEWATCH_SMTP_PASS }}
+          PRICEWATCH_SMTP_SECURE: ${{ secrets.PRICEWATCH_SMTP_SECURE }}
+          PRICEWATCH_TEST_EMAIL: ${{ secrets.PRICEWATCH_TEST_EMAIL }}
+          PRICEWATCH_OPS_EMAIL: ${{ secrets.PRICEWATCH_OPS_EMAIL }}
+          PRICEWATCH_MAIL_ALLOWLIST: ${{ secrets.PRICEWATCH_MAIL_ALLOWLIST }}
+          PRICEWATCH_M1B_UNLOCK: ${{ secrets.PRICEWATCH_M1B_UNLOCK }}
+        run: bash scripts/render-cron-daily.sh

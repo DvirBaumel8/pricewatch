@@ -2,26 +2,80 @@
 
 **Owner:** Boris (ops)
 
-## Cloud vs pilot — which path?
+## Cloud path: GitHub Actions schedule
 
-| Path | Where | Script | Env source | Status |
-|---|---|---|---|---|
-| **Cloud (Render cron)** | Render platform | `scripts/render-cron-daily.sh` | Render Dashboard env vars | **Phase B only** — not in `render.yaml`; see `docs/render-ops.md` |
-| **Pilot (localhost)** | Boris's box | `scripts/cron-daily-monitor.sh` | `.env` file (sourced by script) | Active for local testing |
+The production daily cron runs as a **GitHub Actions** scheduled workflow
+(`.github/workflows/daily-cron.yml`), not a Render cron service.
 
-Both paths run the same pipeline: `enqueue-daily-ticks.js` →
-`run-monitor-worker.js` → `send-outbox.js`. The cloud wrapper does
-**not** source `.env` (Render injects vars); the pilot wrapper does.
+> **CANCELLED — Render cron (paid Starter ~$7/mo): do not create.**
+> `render.yaml` is Free API-only. No `type: cron` entry exists or should
+> be added. The founder locked the free path; GitHub Actions provides $0
+> scheduled runs for public repos.
 
-> **⚠ The cloud cron is NOT in `render.yaml`.** Render cron has no free
-> tier (minimum `plan: starter`, ~$7/month). The YAML snippet is kept in
-> `docs/render-ops.md` § "Daily cron service — Phase B" and must only be
-> added to `render.yaml` when Mark tips Phase B and `pricewatch-api`
-> passes health checks.
+### Schedule
+
+```
+cron: 0 3 * * *   (UTC)
+```
+
+- **Summer (IDT, UTC+3):** fires at 06:00 Asia/Jerusalem
+- **Winter (IST, UTC+2):** fires at 05:00 Asia/Jerusalem
+
+Israel switches to daylight saving in late March (clocks forward) and
+back in late October (clocks back). The UTC cron stays fixed — only the
+local wall-clock time shifts by one hour. GitHub may delay scheduled
+runs by a few minutes; this is acceptable.
+
+### Disarm / arm
+
+The workflow is **disarmed by default**. When `PRICEWATCH_CRON_ARMED` is
+not set to `1`, the job logs `"disarmed — skip"` and exits with a green
+check. No enqueue, no monitor, no mail.
+
+**How to arm (founder / Mark):**
+
+1. Go to **GitHub → repo Settings → Secrets and variables → Actions →
+   Variables** tab.
+2. Click **New repository variable**.
+3. Name: `PRICEWATCH_CRON_ARMED` — Value: `1`.
+4. Save.
+
+The next scheduled run (or a manual `workflow_dispatch`) will execute the
+full pipeline. To disarm again, delete the variable or set it to any
+value other than `1`.
+
+### Secrets (GitHub Actions)
+
+Set these in **GitHub → repo Settings → Secrets and variables → Actions →
+Secrets** tab. Never put values in git, PRs, or chat.
+
+| Secret | Notes |
+|---|---|
+| `DATABASE_URL` | Neon pooled connection string (required — fail-closed) |
+| `DATABASE_URL_NODE` | Optional node-side Neon URL |
+| `PRICEWATCH_KILL` | `1` to kill the pipeline |
+| `RESEND_API_KEY` | Resend mail API key |
+| `PRICEWATCH_MAIL_FROM` | Resend verified sender |
+| `PRICEWATCH_MAIL_REPLY_TO` | Reply-to address |
+| `PRICEWATCH_SMTP_PASS` | Gmail SMTP app password |
+| `PRICEWATCH_SMTP_HOST` | SMTP host |
+| `PRICEWATCH_SMTP_PORT` | SMTP port |
+| `PRICEWATCH_SMTP_USER` | SMTP username |
+| `PRICEWATCH_SMTP_SECURE` | `1` for implicit TLS |
+| `PRICEWATCH_MAIL_TRANSPORT` | Force `resend` or `smtp` |
+| `PRICEWATCH_TEST_EMAIL` | Internal test recipient |
+| `PRICEWATCH_OPS_EMAIL` | Ops alert recipient |
+| `PRICEWATCH_MAIL_ALLOWLIST` | Comma-separated allowlisted recipients (M1b gate) |
+| `PRICEWATCH_M1B_UNLOCK` | `1` to bypass allowlist (after M1b milestone) |
+
+### Manual trigger
+
+Use **Actions → Daily Cron → Run workflow** (the `workflow_dispatch`
+button) for a one-shot proof run after arming.
 
 ---
 
-## Pilot path (localhost)
+## Local pilot paths (Boris box — not cloud)
 
 ### Prerequisites
 

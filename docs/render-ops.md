@@ -5,15 +5,22 @@
 | Service | Type | In `render.yaml`? | Status |
 |---|---|---|---|
 | **Service A** — HTTP API | `web` | **Yes** — `pricewatch-api`, `plan: free` | Live Blueprint; safe to apply |
-| **Daily cron** — monitor + mailer | `cron` | **No** — snippet in docs only | **Phase B only** — do NOT add to Blueprint until Mark tips Phase B |
 
-Workers (Service B) are **out of scope** for Render at this time.
+Workers (Service B) and the daily cron are **not** on Render.
 
-> **Why is the cron not in `render.yaml`?** Render cron jobs have **no
-> free tier** (minimum `plan: starter`, ~$7/month). Including it in the
-> Blueprint would create a paid service on every Blueprint apply. The
-> YAML snippet lives in this doc (see § "Daily cron service — Phase B")
-> and is added to `render.yaml` only when Mark tips Phase B.
+### Daily cron — cloud path: GitHub Actions (not Render)
+
+The daily schedule runs via **GitHub Actions** (`.github/workflows/daily-cron.yml`),
+not a Render cron service. The public repo qualifies for $0 Actions minutes.
+
+> **CANCELLED — do not create a Render cron service.**
+> `render.yaml` is Free API-only (one web service). No `type: cron`
+> entry exists and none should be added. Render cron requires a paid
+> Starter plan (~$7/mo) — the founder locked the free path via GitHub
+> Actions instead.
+
+See `docs/cron-pilot.md` for schedule details, arming instructions, and
+the full secrets list.
 
 ---
 
@@ -48,6 +55,34 @@ Set these in **Render Dashboard → Service → Environment**.
 | `AUTH_STUB` | Set to `1` for stub auth (test only — do not use in production) |
 | `RESEND_API_KEY` | Resend mail transport — only when mailer is enabled |
 | `PRICEWATCH_SMTP_PASS` | Gmail SMTP app password — only when SMTP mailer is enabled |
+
+### Daily cron secrets (GitHub Actions — not Render)
+
+These secrets are set in **GitHub → repo Settings → Secrets and variables →
+Actions** (not in Render). The daily-cron workflow maps them into the
+runner environment:
+
+| Secret | Notes |
+|---|---|
+| `DATABASE_URL` | Same Neon connection string used by Render (required) |
+| `DATABASE_URL_NODE` | Optional node-side Neon URL |
+| `PRICEWATCH_KILL` | Set to `1` to kill the pipeline |
+| `RESEND_API_KEY` | Resend mail transport key |
+| `PRICEWATCH_MAIL_FROM` | Resend verified sender |
+| `PRICEWATCH_MAIL_REPLY_TO` | Reply-to address |
+| `PRICEWATCH_SMTP_PASS` | Gmail SMTP app password (fallback transport) |
+| `PRICEWATCH_SMTP_HOST` | SMTP host (default `smtp.gmail.com`) |
+| `PRICEWATCH_SMTP_PORT` | SMTP port (default `587`) |
+| `PRICEWATCH_SMTP_USER` | SMTP username |
+| `PRICEWATCH_SMTP_SECURE` | Set `1` for implicit TLS on port 465 |
+| `PRICEWATCH_MAIL_TRANSPORT` | Force `resend` or `smtp` |
+| `PRICEWATCH_TEST_EMAIL` | Internal test recipient |
+| `PRICEWATCH_OPS_EMAIL` | Ops alert recipient |
+| `PRICEWATCH_MAIL_ALLOWLIST` | Comma-separated allowlisted recipients (M1b gate) |
+| `PRICEWATCH_M1B_UNLOCK` | `1` to bypass allowlist (after M1b milestone) |
+
+The **arm variable** `PRICEWATCH_CRON_ARMED` is set as a GitHub Actions
+**variable** (not secret) — see `docs/cron-pilot.md` for arming instructions.
 
 ### Automatic (set by Render or the start script)
 
@@ -159,13 +194,6 @@ after ~15 minutes of inactivity; the first request after sleep takes
 development/staging deploy. Upgrade to a paid instance type for
 always-on production use.
 
-### Cron jobs — no Free tier
-
-The daily cron service is **not** in `render.yaml` — Render cron jobs
-have no free tier (minimum `plan: starter`, ~$7/month). The cron YAML
-snippet is in this doc under § "Daily cron service — Phase B" and must
-not be added to the Blueprint until Mark tips Phase B.
-
 ---
 
 ## Blueprint
@@ -175,154 +203,22 @@ not be added to the Blueprint until Mark tips Phase B.
 (`plan: free`). Applying this Blueprint is safe — it creates one free
 web service and nothing else.
 
-The daily cron service is intentionally **excluded** from `render.yaml`
-to prevent accidental paid-service creation. See § "Daily cron service
-— Phase B" below for the ready-to-paste snippet.
-
 `autoDeploy: false` ensures pushes do not bypass CI.
 
 ---
 
-## Daily cron service — Phase B
+## Render cron service — CANCELLED
 
-> **⚠ DO NOT add this to `render.yaml` or create this service on Render
-> until Mark tips Phase B.** Render cron has **no free tier** — the
-> minimum plan is `starter` (~$7/month). Creating it prematurely bills
-> the account immediately.
-
-### Overview
-
-`pricewatch-daily-cron` will be a Render **cron** service (`type: cron`)
-that runs the daily monitor pipeline: enqueue ticks → Service C →
-send-outbox (mailer). It replaces the localhost crontab described in
-`docs/cron-pilot.md` for cloud operation.
-
-The wrapper script is `scripts/render-cron-daily.sh`. It is a thin
-shell script that:
-
-1. Checks the kill switch (`PRICEWATCH_KILL=1` or `data/KILL`).
-2. Fails closed if `DATABASE_URL` / `DATABASE_URL_NODE` is missing.
-3. Runs `enqueue-daily-ticks.js`, `run-monitor-worker.js`, and
-   `send-outbox.js` in sequence — the same pipeline as the pilot
-   cron (`scripts/cron-daily-monitor.sh`), but without sourcing `.env`
-   (Render injects env vars via the dashboard).
-
-**0 LLM on this path** — no AI calls in enqueue, Service C, or mailer.
-
-### Schedule (UTC ↔ Jerusalem DST)
-
-The cron expression is `0 3 * * *` — **03:00 UTC every day**.
-
-| Season | Jerusalem offset | Local wall-clock time |
-|---|---|---|
-| Summer (IDT) | UTC+3 | 06:00 |
-| Winter (IST) | UTC+2 | 05:00 |
-
-The UTC cron is fixed; the local time shifts ±1 hour with DST.
-Israel DST transitions happen in late March and late October.
-
-### Phase B checklist — before adding cron to Blueprint
-
-1. `pricewatch-api` (Service A) passes health checks on Render.
-2. Neon database is reachable from Render.
-3. **Mark tips Phase B** explicitly.
-4. Paste the YAML snippet below into `render.yaml` under `services:`.
-5. Set cron env vars in Render Dashboard (see table below).
-6. Blueprint apply or manual create in Render Dashboard.
-
-### Ready-to-paste YAML snippet (Phase B only)
-
-```yaml
-  # ── Daily cron: monitor + mailer ─────────────────────────────────
-  #
-  # Schedule: "0 3 * * *" = every day at 03:00 UTC.
-  #   - Summer (IDT, UTC+3): 03:00 UTC = 06:00 local Jerusalem
-  #   - Winter (IST, UTC+2): 03:00 UTC = 05:00 local Jerusalem
-  # One stable UTC cron; the local wall-clock shifts by ±1 h with DST.
-  #
-  - type: cron
-    name: pricewatch-daily-cron
-    runtime: node
-    plan: starter
-    schedule: "0 3 * * *"
-    buildCommand: npm ci
-    startCommand: bash scripts/render-cron-daily.sh
-    autoDeploy: false
-    envVars:
-      - key: NODE_ENV
-        value: production
-      - key: DATABASE_URL
-        sync: false
-      - key: DATABASE_URL_NODE
-        sync: false
-      - key: PRICEWATCH_KILL
-        sync: false
-      - key: RESEND_API_KEY
-        sync: false
-      - key: PRICEWATCH_MAIL_TRANSPORT
-        sync: false
-      - key: PRICEWATCH_MAIL_FROM
-        sync: false
-      - key: PRICEWATCH_MAIL_REPLY_TO
-        sync: false
-      - key: PRICEWATCH_SMTP_HOST
-        sync: false
-      - key: PRICEWATCH_SMTP_PORT
-        sync: false
-      - key: PRICEWATCH_SMTP_USER
-        sync: false
-      - key: PRICEWATCH_SMTP_PASS
-        sync: false
-      - key: PRICEWATCH_MAIL_ALLOWLIST
-        sync: false
-      - key: PRICEWATCH_OPS_EMAIL
-        sync: false
-```
-
-### Cron environment variables (Render Dashboard — Phase B)
-
-Set these in **Render Dashboard → Service (`pricewatch-daily-cron`) →
-Environment** after creating the service. Never put secret values in
-`render.yaml`, git, or chat.
-
-#### Required
-
-| Variable | Notes |
-|---|---|
-| `DATABASE_URL` | Neon pooled connection string |
-| `NODE_ENV` | `production` |
-
-#### Mail transport (at least one credential required for sending)
-
-| Variable | Notes |
-|---|---|
-| `RESEND_API_KEY` | Resend API key — preferred transport |
-| `PRICEWATCH_SMTP_PASS` | Gmail app password — SMTP fallback |
-| `PRICEWATCH_MAIL_TRANSPORT` | Force `resend` or `smtp` when both set |
-| `PRICEWATCH_MAIL_FROM` | Sender address / display name |
-| `PRICEWATCH_MAIL_REPLY_TO` | Reply-To header |
-| `PRICEWATCH_SMTP_HOST` | Default `smtp.gmail.com` |
-| `PRICEWATCH_SMTP_PORT` | Default `587` (STARTTLS) |
-| `PRICEWATCH_SMTP_USER` | Default `price.watcher.service@gmail.com` |
-
-#### Mail policy (Rob — Phase A; code not yet merged)
-
-| Variable | Notes |
-|---|---|
-| `PRICEWATCH_MAIL_ALLOWLIST` | Comma-separated recipient addresses allowed to receive mail. When set, `send-outbox` skips any recipient not on the list. **Default: locked closed** (no mail sent to non-allowlisted addresses). Rob owns this gate — see assignment. |
-| `PRICEWATCH_OPS_EMAIL` | Ops alert recipient (defaults to `MAIL_FROM`) |
-
-#### Kill switch
-
-| Variable | Notes |
-|---|---|
-| `PRICEWATCH_KILL` | `1` = stop enqueue + Service C + mailer. The cron wrapper exits 0 immediately. |
-
-#### Optional
-
-| Variable | Notes |
-|---|---|
-| `DATABASE_URL_NODE` | Neon URL for migrations if pooler causes issues |
+> **CANCELLED — do not create.** The daily cron runs via GitHub Actions
+> (free for public repos), not a Render cron service. Render cron has
+> **no free tier** (minimum `plan: starter`, ~$7/month). The founder
+> locked the free path.
+>
+> Do **not** add `type: cron` to `render.yaml`. Do **not** create a
+> cron service in the Render dashboard.
+>
+> See `.github/workflows/daily-cron.yml` and `docs/cron-pilot.md` for
+> the GitHub Actions daily schedule.
 
 ---
 

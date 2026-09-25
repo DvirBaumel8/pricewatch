@@ -1,43 +1,44 @@
 #!/usr/bin/env bash
-# Render cron wrapper for the PriceWatch daily monitor pipeline.
+# Cloud daily-cron wrapper for PriceWatch.
 #
-# Runs the same steps as scripts/cron-daily-monitor.sh but with
-# fail-closed guards appropriate for a cloud cron service:
-#   1. Requires DATABASE_URL (or DATABASE_URL_NODE) — exits non-zero if missing.
-#   2. Respects PRICEWATCH_KILL=1 — exits 0 immediately (no work done).
-#   3. Does NOT source .env (Render injects env vars via its dashboard).
+# Runs the same pipeline as cron-daily-monitor.sh but does NOT source .env —
+# the cloud runner (GitHub Actions or Render) injects env vars externally.
 #
-# Schedule (set in render.yaml): 03:00 UTC daily.
-#   - Summer (IDT, UTC+3): 03:00 UTC = 06:00 Jerusalem
-#   - Winter (IST, UTC+2): 03:00 UTC = 05:00 Jerusalem
+# Pipeline:  enqueue-daily-ticks.js → run-monitor-worker.js → send-outbox.js
 #
-# ⚠  DISARMED until Phase B — do not create this service on Render
-#    until Mark tips Phase B and pricewatch-api passes health checks.
+# Schedule target: 0 3 * * * UTC
+#   = 06:00 Asia/Jerusalem (IDT, summer, UTC+3)
+#   = 05:00 Asia/Jerusalem (IST, winter, UTC+2)
+#   GitHub may delay scheduled runs by a few minutes — acceptable.
+#
+# Cloud path: GitHub Actions (.github/workflows/daily-cron.yml).
+# Render cron is CANCELLED (paid starter) — do not create.
+#
+# Kill switch: set PRICEWATCH_KILL=1 or create data/KILL to skip all steps.
+# Fail-closed: exits non-zero when DATABASE_URL is missing.
 
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-echo "=== PriceWatch Render daily cron — $(date -u +%Y-%m-%dT%H:%M:%SZ) ==="
+echo "=== PriceWatch daily cron — $(date -u +%Y-%m-%dT%H:%M:%SZ) ==="
 
-# ── Kill switch ────────────────────────────────────────────────────
-if [ "${PRICEWATCH_KILL:-}" = "1" ]; then
-  echo "PRICEWATCH_KILL is set — cron no-op (exit 0)."
-  exit 0
-fi
-
+# ── Kill switch ──────────────────────────────────────────────────
 if [ -f data/KILL ]; then
   echo "data/KILL file present — cron no-op (exit 0)."
   exit 0
 fi
+if [ "${PRICEWATCH_KILL:-}" = "1" ]; then
+  echo "PRICEWATCH_KILL=1 — cron no-op (exit 0)."
+  exit 0
+fi
 
-# ── Fail closed: require a database connection string ──────────────
+# ── Fail closed: require a database connection string ────────────
 if [ -z "${DATABASE_URL:-}" ] && [ -z "${DATABASE_URL_NODE:-}" ]; then
   echo "FATAL: DATABASE_URL or DATABASE_URL_NODE must be set." >&2
-  echo "Set the variable in Render Dashboard → Environment." >&2
   exit 1
 fi
 
-# ── Pipeline: enqueue → Service C → send-outbox ───────────────────
+# ── Pipeline: enqueue → Service C → send-outbox ─────────────────
 mkdir -p logs
 
 echo "--- enqueue-daily-ticks ---"
