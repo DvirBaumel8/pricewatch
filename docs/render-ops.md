@@ -145,10 +145,19 @@ execution if worker scripts are ever added to the Render service.
 
 ## Free-tier sleep caveat
 
-Render's free tier spins down web services after ~15 minutes of
-inactivity. The first request after sleep takes 30–60 seconds while the
-service cold-starts. This is expected for a development/staging deploy.
-Upgrade to a paid instance type for always-on production use.
+`pricewatch-api` is pinned to the **Free** plan (`plan: free` in
+`render.yaml`) — 0.1 CPU / 512 MB, $0/mo. Free web services spin down
+after ~15 minutes of inactivity; the first request after sleep takes
+30–60 seconds while the service cold-starts. This is expected for a
+development/staging deploy. Upgrade to a paid instance type for
+always-on production use.
+
+### Cron jobs — no Free tier
+
+Render cron jobs require **Starter** ($1/mo+) or higher; there is no
+free-tier cron. The daily price-check cron is intentionally kept out of
+`render.yaml` until Phase B or until the founder accepts the paid cron
+cost.
 
 ---
 
