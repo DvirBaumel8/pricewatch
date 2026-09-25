@@ -1,12 +1,13 @@
-# Render Deploy — ops note (PriceWatch Service A)
+# Render Deploy — ops note (PriceWatch)
 
 ## What runs on Render
 
-**Service A** — the thin HTTP API (`src/service-a.js`).
-One web service named `pricewatch-api`.
+| Service | Type | Name in Blueprint | Status |
+|---|---|---|---|
+| **Service A** — HTTP API | `web` | `pricewatch-api` | Defined (`render.yaml`) |
+| **Daily cron** — monitor + mailer | `cron` | `pricewatch-daily-cron` | Defined (`render.yaml`) — **DISARMED until Phase B** |
 
-Workers (Service B, Service C), the daily cron, and the mailer are
-**out of scope** for this deploy. The daily cron stays closed.
+Workers (Service B) are **out of scope** for Render at this time.
 
 ---
 
@@ -163,12 +164,104 @@ cost.
 
 ## Blueprint
 
-`render.yaml` at repo root defines the service for Render Blueprints
-(Infrastructure as Code). It declares the service name, runtime, build
-command, start command, health check path, and environment variable names
+`render.yaml` at repo root defines all Render services via Blueprints
+(Infrastructure as Code). It declares service names, types, runtimes,
+build/start commands, schedules, and environment variable **names**
 (without values — values live in the Render dashboard).
 
-`autoDeploy: false` ensures pushes do not bypass CI.
+`autoDeploy: false` on every service ensures pushes do not bypass CI.
+
+---
+
+## Daily cron service
+
+### Overview
+
+`pricewatch-daily-cron` is a Render **cron** service (`type: cron`)
+that runs the daily monitor pipeline: enqueue ticks → Service C →
+send-outbox (mailer). It replaces the localhost crontab described in
+`docs/cron-pilot.md` for cloud operation.
+
+The wrapper script is `scripts/render-cron-daily.sh`. It is a thin
+shell script that:
+
+1. Checks the kill switch (`PRICEWATCH_KILL=1` or `data/KILL`).
+2. Fails closed if `DATABASE_URL` / `DATABASE_URL_NODE` is missing.
+3. Runs `enqueue-daily-ticks.js`, `run-monitor-worker.js`, and
+   `send-outbox.js` in sequence — the same pipeline as the pilot
+   cron (`scripts/cron-daily-monitor.sh`), but without sourcing `.env`
+   (Render injects env vars via the dashboard).
+
+**0 LLM on this path** — no AI calls in enqueue, Service C, or mailer.
+
+### Schedule (UTC ↔ Jerusalem DST)
+
+The cron expression is `0 3 * * *` — **03:00 UTC every day**.
+
+| Season | Jerusalem offset | Local wall-clock time |
+|---|---|---|
+| Summer (IDT) | UTC+3 | 06:00 |
+| Winter (IST) | UTC+2 | 05:00 |
+
+The UTC cron is fixed; the local time shifts ±1 hour with DST.
+Israel DST transitions happen in late March and late October.
+
+### ⚠ DISARMED — do NOT enable until Phase B
+
+The cron service is defined in `render.yaml` but must **not** be
+created on Render until:
+
+1. `pricewatch-api` (Service A) passes health checks on Render.
+2. Neon database is reachable from Render.
+3. **Mark tips Phase B** explicitly.
+
+`autoDeploy: false` is set in the Blueprint. Do not manually create
+the service in the Render dashboard, do not trigger a deploy, and do
+not remove the `autoDeploy: false` flag until Phase B.
+
+### Cron environment variables (Render Dashboard)
+
+Set these in **Render Dashboard → Service (`pricewatch-daily-cron`) →
+Environment**. Never put secret values in `render.yaml`, git, or chat.
+
+#### Required
+
+| Variable | Notes |
+|---|---|
+| `DATABASE_URL` | Neon pooled connection string |
+| `NODE_ENV` | `production` |
+
+#### Mail transport (at least one credential required for sending)
+
+| Variable | Notes |
+|---|---|
+| `RESEND_API_KEY` | Resend API key — preferred transport |
+| `PRICEWATCH_SMTP_PASS` | Gmail app password — SMTP fallback |
+| `PRICEWATCH_MAIL_TRANSPORT` | Force `resend` or `smtp` when both set |
+| `PRICEWATCH_MAIL_FROM` | Sender address / display name |
+| `PRICEWATCH_MAIL_REPLY_TO` | Reply-To header |
+| `PRICEWATCH_SMTP_HOST` | Default `smtp.gmail.com` |
+| `PRICEWATCH_SMTP_PORT` | Default `587` (STARTTLS) |
+| `PRICEWATCH_SMTP_USER` | Default `price.watcher.service@gmail.com` |
+
+#### Mail policy (Rob — Phase A; code not yet merged)
+
+| Variable | Notes |
+|---|---|
+| `PRICEWATCH_MAIL_ALLOWLIST` | Comma-separated recipient addresses allowed to receive mail. When set, `send-outbox` skips any recipient not on the list. **Default: locked closed** (no mail sent to non-allowlisted addresses). Rob owns this gate — see assignment. |
+| `PRICEWATCH_OPS_EMAIL` | Ops alert recipient (defaults to `MAIL_FROM`) |
+
+#### Kill switch
+
+| Variable | Notes |
+|---|---|
+| `PRICEWATCH_KILL` | `1` = stop enqueue + Service C + mailer. The cron wrapper exits 0 immediately. |
+
+#### Optional
+
+| Variable | Notes |
+|---|---|
+| `DATABASE_URL_NODE` | Neon URL for migrations if pooler causes issues |
 
 ---
 

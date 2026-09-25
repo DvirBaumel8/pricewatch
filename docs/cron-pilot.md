@@ -1,14 +1,34 @@
-# Cron / stay-alive setup for PriceWatch pilot
+# Cron setup for PriceWatch
 
 **Owner:** Boris (ops)
 
-## Prerequisites
+## Cloud vs pilot — which path?
+
+| Path | Where | Script | Env source | Status |
+|---|---|---|---|---|
+| **Cloud (Render cron)** | Render platform | `scripts/render-cron-daily.sh` | Render Dashboard env vars | **DISARMED until Phase B** — see `docs/render-ops.md` |
+| **Pilot (localhost)** | Boris's box | `scripts/cron-daily-monitor.sh` | `.env` file (sourced by script) | Active for local testing |
+
+Both paths run the same pipeline: `enqueue-daily-ticks.js` →
+`run-monitor-worker.js` → `send-outbox.js`. The cloud wrapper does
+**not** source `.env` (Render injects vars); the pilot wrapper does.
+
+The cloud cron is defined in `render.yaml` (`pricewatch-daily-cron`,
+`type: cron`, schedule `0 3 * * *` = 03:00 UTC daily). It must not
+be created on Render until Mark tips Phase B and `pricewatch-api`
+passes health checks. See `docs/render-ops.md` § "Daily cron service".
+
+---
+
+## Pilot path (localhost)
+
+### Prerequisites
 
 1. Node.js 18+ on the pilot box
 2. Repo cloned / pulled to latest
 3. `.env` populated from `.env.example` (see below)
 
-## Environment
+### Environment
 
 Copy `.env.example` to `.env` and fill in credentials:
 
@@ -34,7 +54,7 @@ Key vars the cron scripts source from `.env`:
 | `PRICEWATCH_SMTP_SECURE` | no | unset (STARTTLS) | Set `1` only if using port 465 |
 | `PRICEWATCH_SMTP_USER` | no | `price.watcher.service@gmail.com` | |
 
-## Option A: crontab (preferred)
+### Option A: crontab (preferred)
 
 ```bash
 # 06:00 Asia/Jerusalem ≈ 03:00 UTC
@@ -49,7 +69,7 @@ The cron script:
 3. Runs `run-monitor-worker.js` (Service C — processes ticks)
 4. Runs `send-outbox.js` (drains outbox → real email; no-op if no creds)
 
-## Option B: nohup loop (no cron)
+### Option B: nohup loop (no cron)
 
 ```bash
 mkdir -p logs
