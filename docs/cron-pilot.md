@@ -80,6 +80,21 @@ echo $! > logs/pilot-daily.pid
 
 Stop: `kill $(cat logs/pilot-daily.pid)` or `touch data/KILL`.
 
+## Mail allowlist (M1b gate)
+
+Until M1b unlock, the mailer only sends to recipients on an internal/test
+allowlist. Non-allowlisted recipients are skipped (logged, outbox preserved).
+
+| Variable | Notes |
+|---|---|
+| `PRICEWATCH_MAIL_ALLOWLIST` | Comma-separated extra addresses |
+| `PRICEWATCH_M1B_UNLOCK` | Set to `1` after M1b to allow all recipients |
+
+`PRICEWATCH_TEST_EMAIL` and `PRICEWATCH_OPS_EMAIL` are auto-included in the
+allowlist — no need to duplicate them.
+
+See `docs/mail-policy.md` for full details and shame-test coverage.
+
 ## Kill switch
 
 - `touch data/KILL` — stops enqueue, Service C, and mailer
