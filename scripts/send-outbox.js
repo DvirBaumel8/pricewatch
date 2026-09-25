@@ -49,6 +49,32 @@ function isKilled() {
   return false;
 }
 
+// ── M1b allowlist gate ────────────────────────────────────────────
+
+function isM1bUnlocked() {
+  return process.env.PRICEWATCH_M1B_UNLOCK === "1";
+}
+
+function parseAllowlist() {
+  const list = new Set();
+  const raw = process.env.PRICEWATCH_MAIL_ALLOWLIST || "";
+  for (const entry of raw.split(",")) {
+    const e = entry.trim().toLowerCase();
+    if (e) list.add(e);
+  }
+  const testEmail = (process.env.PRICEWATCH_TEST_EMAIL || "").trim().toLowerCase();
+  if (testEmail) list.add(testEmail);
+  const opsEmail = (process.env.PRICEWATCH_OPS_EMAIL || "").trim().toLowerCase();
+  if (opsEmail) list.add(opsEmail);
+  return list;
+}
+
+function isAllowlisted(email) {
+  if (isM1bUnlocked()) return true;
+  const list = parseAllowlist();
+  return list.has((email || "").trim().toLowerCase());
+}
+
 const SMTP_HOST = process.env.PRICEWATCH_SMTP_HOST || "smtp.gmail.com";
 const SMTP_PORT = parseInt(process.env.PRICEWATCH_SMTP_PORT || "587", 10);
 const SMTP_SECURE = process.env.PRICEWATCH_SMTP_SECURE;
@@ -357,6 +383,12 @@ async function drainOutbox() {
       continue;
     }
 
+    if (!isAllowlisted(to)) {
+      console.log(`[mailer] BLOCKED (not allowlisted, M1b locked): ${file} → ${to}`);
+      skipped++;
+      continue;
+    }
+
     const subject = resolveSubject(email);
     const body = email.body || JSON.stringify(email, null, 2);
 
@@ -407,7 +439,7 @@ async function main() {
   }
 }
 
-module.exports = { drainOutbox, sendEmail, markSent, isSent, isKilled, OUTBOX_DIR, SENT_DIR, KILL_FILE };
+module.exports = { drainOutbox, sendEmail, markSent, isSent, isKilled, isM1bUnlocked, isAllowlisted, parseAllowlist, OUTBOX_DIR, SENT_DIR, KILL_FILE };
 
 if (require.main === module) {
   main().catch((err) => {
