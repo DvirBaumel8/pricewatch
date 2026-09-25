@@ -81,4 +81,6 @@ jobs:
           PRICEWATCH_SMTP_SECURE: ${{ secrets.PRICEWATCH_SMTP_SECURE }}
           PRICEWATCH_TEST_EMAIL: ${{ secrets.PRICEWATCH_TEST_EMAIL }}
           PRICEWATCH_OPS_EMAIL: ${{ secrets.PRICEWATCH_OPS_EMAIL }}
+          PRICEWATCH_MAIL_ALLOWLIST: ${{ secrets.PRICEWATCH_MAIL_ALLOWLIST }}
+          PRICEWATCH_M1B_UNLOCK: ${{ secrets.PRICEWATCH_M1B_UNLOCK }}
         run: bash scripts/render-cron-daily.sh
