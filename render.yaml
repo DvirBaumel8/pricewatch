@@ -8,8 +8,8 @@ services:
   # ── Service A: HTTP API ──────────────────────────────────────────
   - type: web
     name: pricewatch-api
-    plan: free
     runtime: node
+    plan: free
     buildCommand: npm ci
     startCommand: bash scripts/render-start.sh
     healthCheckPath: /health
@@ -46,6 +46,7 @@ services:
   - type: cron
     name: pricewatch-daily-cron
     runtime: node
+    plan: starter
     schedule: "0 3 * * *"
     buildCommand: npm ci
     startCommand: bash scripts/render-cron-daily.sh
