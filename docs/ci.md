@@ -59,3 +59,35 @@ deploy hook. Deploys only happen when both Test and Lint are green.
 
 See `docs/render-ops.md` for full Render ops documentation, environment
 variable setup, and the deploy hook configuration steps.
+
+## Daily cron (GitHub Actions schedule)
+
+`.github/workflows/daily-cron.yml` runs the PriceWatch daily pipeline
+(enqueue → monitor → send-outbox) on a schedule.
+
+| Trigger | When |
+|---|---|
+| `on.schedule` | `0 3 * * *` UTC (06:00 Jerusalem summer / 05:00 winter) |
+| `on.workflow_dispatch` | Manual one-shot via Actions UI |
+
+### Disarmed by default
+
+The workflow checks the GitHub Actions **variable** `PRICEWATCH_CRON_ARMED`.
+When it is not set to `1`, the job logs `"disarmed — skip"` and exits
+green — no enqueue, no monitor, no mail.
+
+**To arm:** set `PRICEWATCH_CRON_ARMED` to `1` in GitHub → repo Settings →
+Secrets and variables → Actions → Variables. See `docs/cron-pilot.md`
+for full instructions.
+
+### Secrets
+
+The workflow maps GitHub Actions secrets (names only) into the runner
+environment for `scripts/render-cron-daily.sh`. Required: `DATABASE_URL`.
+Optional: `DATABASE_URL_NODE`, `PRICEWATCH_KILL`, `RESEND_API_KEY`,
+mail transport + allowlist secrets. See `docs/cron-pilot.md` for the
+full secret list.
+
+> **Note:** Render cron is **CANCELLED** (paid Starter plan). The daily
+> schedule uses GitHub Actions only. Do not add `type: cron` to
+> `render.yaml`.
