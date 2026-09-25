@@ -73,6 +73,33 @@ Secrets** tab. Never put values in git, PRs, or chat.
 Use **Actions → Daily Cron → Run workflow** (the `workflow_dispatch`
 button) for a one-shot proof run after arming.
 
+### Seeded allowlisted Resend proof (dispatch-only)
+
+To force one live Resend delivery through the armed pipeline:
+
+1. Go to **GitHub → Actions → Daily Cron → Run workflow**.
+2. Check the **"Seed one allowlisted outbox entry for live Resend proof"**
+   checkbox (`seed_allowlisted_proof`).
+3. Click **Run workflow**.
+
+This seeds exactly one outbox entry addressed to the pilot recipient
+(`PRICEWATCH_TEST_EMAIL` secret) and then the normal pipeline drains it
+through the allowlist gate and Resend transport.
+
+**Requirements:**
+- `PRICEWATCH_CRON_ARMED` must be `1` (the pipeline must be armed).
+- `PRICEWATCH_TEST_EMAIL` must be set (hard-fail if missing).
+- `RESEND_API_KEY` and `PRICEWATCH_MAIL_FROM` must be configured.
+
+**Safety:**
+- Scheduled runs **never** seed — the seed step only runs on
+  `workflow_dispatch` with the input explicitly set to true.
+- The default for `seed_allowlisted_proof` is **false** — a plain
+  `workflow_dispatch` without checking the box does not seed.
+- The seeded entry goes through the normal allowlist gate; if the
+  recipient is not allowlisted, `send-outbox.js` blocks it.
+- `PRICEWATCH_M1B_UNLOCK` is **not** required and should stay unset.
+
 ---
 
 ## Local pilot paths (Boris box — not cloud)
