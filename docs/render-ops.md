@@ -2,12 +2,18 @@
 
 ## What runs on Render
 
-| Service | Type | Name in Blueprint | Status |
+| Service | Type | In `render.yaml`? | Status |
 |---|---|---|---|
-| **Service A** — HTTP API | `web` | `pricewatch-api` | Defined (`render.yaml`) |
-| **Daily cron** — monitor + mailer | `cron` | `pricewatch-daily-cron` | Defined (`render.yaml`) — **DISARMED until Phase B** |
+| **Service A** — HTTP API | `web` | **Yes** — `pricewatch-api`, `plan: free` | Live Blueprint; safe to apply |
+| **Daily cron** — monitor + mailer | `cron` | **No** — snippet in docs only | **Phase B only** — do NOT add to Blueprint until Mark tips Phase B |
 
 Workers (Service B) are **out of scope** for Render at this time.
+
+> **Why is the cron not in `render.yaml`?** Render cron jobs have **no
+> free tier** (minimum `plan: starter`, ~$7/month). Including it in the
+> Blueprint would create a paid service on every Blueprint apply. The
+> YAML snippet lives in this doc (see § "Daily cron service — Phase B")
+> and is added to `render.yaml` only when Mark tips Phase B.
 
 ---
 
@@ -155,29 +161,38 @@ always-on production use.
 
 ### Cron jobs — no Free tier
 
-Render cron jobs require **Starter** ($1/mo+) or higher; there is no
-free-tier cron. The daily price-check cron is intentionally kept out of
-`render.yaml` until Phase B or until the founder accepts the paid cron
-cost.
+The daily cron service is **not** in `render.yaml` — Render cron jobs
+have no free tier (minimum `plan: starter`, ~$7/month). The cron YAML
+snippet is in this doc under § "Daily cron service — Phase B" and must
+not be added to the Blueprint until Mark tips Phase B.
 
 ---
 
 ## Blueprint
 
-`render.yaml` at repo root defines all Render services via Blueprints
-(Infrastructure as Code). It declares service names, types, runtimes,
-build/start commands, schedules, and environment variable **names**
-(without values — values live in the Render dashboard).
+`render.yaml` at repo root defines Render services via Blueprints
+(Infrastructure as Code). Currently it contains **only** `pricewatch-api`
+(`plan: free`). Applying this Blueprint is safe — it creates one free
+web service and nothing else.
 
-`autoDeploy: false` on every service ensures pushes do not bypass CI.
+The daily cron service is intentionally **excluded** from `render.yaml`
+to prevent accidental paid-service creation. See § "Daily cron service
+— Phase B" below for the ready-to-paste snippet.
+
+`autoDeploy: false` ensures pushes do not bypass CI.
 
 ---
 
-## Daily cron service
+## Daily cron service — Phase B
+
+> **⚠ DO NOT add this to `render.yaml` or create this service on Render
+> until Mark tips Phase B.** Render cron has **no free tier** — the
+> minimum plan is `starter` (~$7/month). Creating it prematurely bills
+> the account immediately.
 
 ### Overview
 
-`pricewatch-daily-cron` is a Render **cron** service (`type: cron`)
+`pricewatch-daily-cron` will be a Render **cron** service (`type: cron`)
 that runs the daily monitor pipeline: enqueue ticks → Service C →
 send-outbox (mailer). It replaces the localhost crontab described in
 `docs/cron-pilot.md` for cloud operation.
@@ -206,23 +221,69 @@ The cron expression is `0 3 * * *` — **03:00 UTC every day**.
 The UTC cron is fixed; the local time shifts ±1 hour with DST.
 Israel DST transitions happen in late March and late October.
 
-### ⚠ DISARMED — do NOT enable until Phase B
-
-The cron service is defined in `render.yaml` but must **not** be
-created on Render until:
+### Phase B checklist — before adding cron to Blueprint
 
 1. `pricewatch-api` (Service A) passes health checks on Render.
 2. Neon database is reachable from Render.
 3. **Mark tips Phase B** explicitly.
+4. Paste the YAML snippet below into `render.yaml` under `services:`.
+5. Set cron env vars in Render Dashboard (see table below).
+6. Blueprint apply or manual create in Render Dashboard.
 
-`autoDeploy: false` is set in the Blueprint. Do not manually create
-the service in the Render dashboard, do not trigger a deploy, and do
-not remove the `autoDeploy: false` flag until Phase B.
+### Ready-to-paste YAML snippet (Phase B only)
 
-### Cron environment variables (Render Dashboard)
+```yaml
+  # ── Daily cron: monitor + mailer ─────────────────────────────────
+  #
+  # Schedule: "0 3 * * *" = every day at 03:00 UTC.
+  #   - Summer (IDT, UTC+3): 03:00 UTC = 06:00 local Jerusalem
+  #   - Winter (IST, UTC+2): 03:00 UTC = 05:00 local Jerusalem
+  # One stable UTC cron; the local wall-clock shifts by ±1 h with DST.
+  #
+  - type: cron
+    name: pricewatch-daily-cron
+    runtime: node
+    plan: starter
+    schedule: "0 3 * * *"
+    buildCommand: npm ci
+    startCommand: bash scripts/render-cron-daily.sh
+    autoDeploy: false
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        sync: false
+      - key: DATABASE_URL_NODE
+        sync: false
+      - key: PRICEWATCH_KILL
+        sync: false
+      - key: RESEND_API_KEY
+        sync: false
+      - key: PRICEWATCH_MAIL_TRANSPORT
+        sync: false
+      - key: PRICEWATCH_MAIL_FROM
+        sync: false
+      - key: PRICEWATCH_MAIL_REPLY_TO
+        sync: false
+      - key: PRICEWATCH_SMTP_HOST
+        sync: false
+      - key: PRICEWATCH_SMTP_PORT
+        sync: false
+      - key: PRICEWATCH_SMTP_USER
+        sync: false
+      - key: PRICEWATCH_SMTP_PASS
+        sync: false
+      - key: PRICEWATCH_MAIL_ALLOWLIST
+        sync: false
+      - key: PRICEWATCH_OPS_EMAIL
+        sync: false
+```
+
+### Cron environment variables (Render Dashboard — Phase B)
 
 Set these in **Render Dashboard → Service (`pricewatch-daily-cron`) →
-Environment**. Never put secret values in `render.yaml`, git, or chat.
+Environment** after creating the service. Never put secret values in
+`render.yaml`, git, or chat.
 
 #### Required
 

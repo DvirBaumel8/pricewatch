@@ -1,11 +1,16 @@
-# Render Blueprint — PriceWatch
+# Render Blueprint — PriceWatch (API only)
 # https://render.com/docs/blueprint-spec
 #
 # Secret values are NOT stored here. Set them in Render Dashboard → Environment.
 # autoDeploy is false — deploys are triggered by GitHub Actions after CI passes.
+#
+# ⚠  This file defines ONLY pricewatch-api (free tier).
+#    The daily cron service is NOT in this file — it is a paid service
+#    (starter, $1+/month) and must NOT be Blueprint-applied until Phase B.
+#    See docs/render-ops.md § "Daily cron service (Phase B)" for the
+#    ready-to-paste YAML snippet.
 
 services:
-  # ── Service A: HTTP API ──────────────────────────────────────────
   - type: web
     name: pricewatch-api
     runtime: node
@@ -30,53 +35,4 @@ services:
       - key: GOOGLE_CLIENT_SECRET
         sync: false
       - key: GOOGLE_REDIRECT_URI
-        sync: false
-
-  # ── Daily cron: monitor + mailer ─────────────────────────────────
-  #
-  # Schedule: "0 3 * * *" = every day at 03:00 UTC.
-  #   - Summer (IDT, UTC+3): 03:00 UTC = 06:00 local Jerusalem
-  #   - Winter (IST, UTC+2): 03:00 UTC = 05:00 local Jerusalem
-  # One stable UTC cron; the local wall-clock shifts by ±1 h with DST.
-  #
-  # ⚠  DISARMED — do NOT create this service on Render until Phase B.
-  #    autoDeploy is false. Mark must tip Phase B before arming.
-  #    See docs/render-ops.md § "Daily cron service".
-  #
-  - type: cron
-    name: pricewatch-daily-cron
-    runtime: node
-    plan: starter
-    schedule: "0 3 * * *"
-    buildCommand: npm ci
-    startCommand: bash scripts/render-cron-daily.sh
-    autoDeploy: false
-    envVars:
-      - key: NODE_ENV
-        value: production
-      - key: DATABASE_URL
-        sync: false
-      - key: DATABASE_URL_NODE
-        sync: false
-      - key: PRICEWATCH_KILL
-        sync: false
-      - key: RESEND_API_KEY
-        sync: false
-      - key: PRICEWATCH_MAIL_TRANSPORT
-        sync: false
-      - key: PRICEWATCH_MAIL_FROM
-        sync: false
-      - key: PRICEWATCH_MAIL_REPLY_TO
-        sync: false
-      - key: PRICEWATCH_SMTP_HOST
-        sync: false
-      - key: PRICEWATCH_SMTP_PORT
-        sync: false
-      - key: PRICEWATCH_SMTP_USER
-        sync: false
-      - key: PRICEWATCH_SMTP_PASS
-        sync: false
-      - key: PRICEWATCH_MAIL_ALLOWLIST
-        sync: false
-      - key: PRICEWATCH_OPS_EMAIL
         sync: false
