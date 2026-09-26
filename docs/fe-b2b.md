@@ -1,6 +1,6 @@
 # FE-B2B — Marketing landing + signed-in app
 
-Wave 14 splits public **marketing landing** from **signed-in product** on the same `/fe-b2b/` URL (view swap). Wave 13 demo-ready product chrome is preserved for the signed-in path. Talks to **Service A HTTP APIs only**. No second backend, no client-invented watches, 0 LLM, **no Stripe**.
+Wave 14 splits public **marketing landing** from **signed-in product** on the same `/fe-b2b/` URL (view swap). Wave 13 demo-ready product chrome is preserved for the signed-in path. **Wave 15** adds Tierpeek-style **multi-competitor watches** (list + persistent Add + soft UI cap). Talks to **Service A HTTP APIs only**. No second backend, no client-invented watches, 0 LLM, **no Stripe**.
 
 Primary login UX is **Continue with Google** (GIS, Wave 12b). Fail-closed when Google code/keys are missing. **NEVER** put `GOOGLE_CLIENT_SECRET` (or any secret) in FE HTML, JS, git, or docs values.
 
@@ -58,11 +58,11 @@ DOM: `#landingView` (default) ↔ `#appView` (after `POST /auth/login` success).
 - Primary CTA: **Continue with Google** (GIS) only.
 - **No** add-rival form, checkout stub, live watch list, or Dev/stub panels on the google camera path.
 
-## Signed-in app (Wave 13 product, Wave 14 container)
+## Signed-in app (Wave 13 product, Wave 14 container, Wave 15 list)
 
 - Brand mark + **PriceWatch** title (no “(thin)” / “B2B thin” chip).
 - No Service A / thin / API jargon on the camera path.
-- Honesty chip → Start pilot → You're in → add watch → Option B waiting.
+- Honesty chip → Start pilot → You're in → add watch → **Your watches** (one Option B card per rival).
 - Signed-in state shows the human email (not a raw JSON hero).
 
 ## Login hook — Google Sign-In (GIS) primary
@@ -94,12 +94,13 @@ Client-side stub only. No Stripe, no fake card last4, no implied live charge.
 3. Enter competitor name + pricing URL (+ optional focus plan) → `POST /b2b/intake/preview`.
 4. Select plan(s) → FE creates a customer via `POST /customers` if needed → `POST /b2b/intake/confirm` with `customer_id` + `selected[{ plan_key }]`.
 5. Server owns allowlist / ownership; FE never bypasses. Watches are not invented in the browser.
+6. After success: inputs clear; preview→confirm is ready for the **next** URL. Add stays on the same signed-in view (Tierpeek persistent Add).
 
 Camera path uses human copy (Competitor name, Preview plans, Confirm watch) — no on-screen `POST /b2b/…` jargon.
 
-## Watch card + Waiting Option B
+## Your watches (Wave 15 — multi-competitor)
 
-After confirm, the product card shows:
+Signed-in app shows a **Your watches** list — one quiet Option B card **per rival** (not a single overwritten slot):
 
 - Rival name + URL
 - Baseline plans / $
@@ -107,7 +108,23 @@ After confirm, the product card shows:
 - **Last checked** (Israel time)
 - Cadence: **Daily · morning Israel time**
 
-Optional collapsed debug details. Prefer preview/confirm data; otherwise honest values matching the previewed plans. No fake busy scanning.
+Each successful confirm **appends** (or merges plans for the same URL). Prior rivals stay visible.
+
+### Soft UI cap — `FE_WATCH_SOFT_CAP = 5`
+
+Demo-ready soft stop in the FE (`public/fe-b2b/index.html` constant **`FE_WATCH_SOFT_CAP = 5`**). At the cap: friendly “you're full” message; refuse new confirm; **existing cards keep running**. Backend soft-cap remains **50** (`UNLIMITED_SOFT_CAP`) — the API is not product-capped at a single rival.
+
+### Reload from Service A
+
+On app open / session restore, FE loads watches from Service A when a customer is known:
+
+1. Resolve customer via `GET /customers` (match signed-in email / user).
+2. Prefer **`GET /customers/:id/watch-targets`**; fall back to `GET /customers/:id` (`watch_targets` / competitors).
+3. Group WatchTargets by `source_url` → one Option B card per rival.
+
+Confirm still creates watches only via `POST /b2b/intake/confirm`. Session restore keeps the list across refresh when the JWT session is present.
+
+Optional collapsed debug details. Prefer preview/confirm data; otherwise honest values from the list API. No fake busy scanning.
 
 ## What this is not
 
@@ -149,13 +166,14 @@ Default theme is **light** (Wave 10). Shared CSS tokens live in `public/fe-share
 
 `test/test-fe-b2b.js` (Wave 7 + 13) and `test/test-host-fe-b2b.js` (Wave 8) are wired into `npm test`:
 
-Wave 7 / 13 / 14 FE:
+Wave 7 / 13 / 14 / 15 FE:
 - (a) missing auth → clear error
 - (b) preview → confirm happy path (stub + lab fixture)
 - (c) Wave 4/5/6 API shame still in `npm test`
 - (d) no secrets in git
 - Wave 13: honesty chip, checkout stub, Option B phrases, product watch card; no lab chrome / Stripe / fake last4 on camera path
 - Wave 14: landing vs app view swap; GIS CTA on landing; no add-watch/checkout/live watches on signed-out camera path; sample card labeled not a live watch
+- Wave 15: “Your watches” multi-card list (not overwrite-only); `FE_WATCH_SOFT_CAP = 5`; persistent Add after success; reload via `GET /customers/:id/watch-targets`
 
 Wave 8 host:
 - (a) Service A static `/fe-b2b/` serves index

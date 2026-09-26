@@ -2,8 +2,9 @@
 "use strict";
 
 /**
- * Wave 7 + Wave 13 + Wave 14 FE-B2B shame-tests (0 LLM).
+ * Wave 7 + Wave 13 + Wave 14 + Wave 15 FE-B2B shame-tests (0 LLM).
  * Wave 14: signed-out landing vs signed-in app view swap.
+ * Wave 15: multi-competitor Your watches list + soft UI cap + persistent Add.
  *
  * (a) missing auth → clear error (UI contract + API)
  * (b) preview→confirm happy path against stub/lab (in-memory Neon mock)
@@ -449,7 +450,7 @@ async function main() {
     assert(/Competitor name/i.test(html), "human rival name label");
     assert(!/>\s*Customer name\s*</i.test(html), "no Customer name lab label");
     // S5/S6 product watch card + Option B
-    assert(/Your watch|watchProduct|baselinePlans/i.test(html), "product watch card");
+    assert(/Your watches|Your watch|watch-product|baseline-plans|watchesList/i.test(html), "product watch card / list");
     assert(/No price change/i.test(html), "Option B quiet status");
     assert(/Last checked/i.test(html), "Option B last checked");
     assert(/Daily.*morning Israel|morning Israel time/i.test(html), "Option B cadence");
@@ -517,6 +518,37 @@ async function main() {
     );
   });
 
+  await test("Wave 15 multi-watch: Your watches list, soft cap, persistent Add, reload path", () => {
+    const html = fs.readFileSync(FE_HTML, "utf8");
+    // List title / multi-card (not overwrite-only single slot)
+    assert(/Your watches/i.test(html), "Your watches list title");
+    assert(/id=["']watchesList["']/.test(html), "watchesList container");
+    assert(/upsertWatchCard|state\.watches/i.test(html), "append/list state (not overwrite-only)");
+    assert(!/function renderWatchCard\s*\(/.test(html), "must not use overwrite-only renderWatchCard");
+    // Soft UI cap constant assertable
+    assert(
+      /FE_WATCH_SOFT_CAP\s*=\s*5/.test(html),
+      "FE_WATCH_SOFT_CAP = 5 must be present and assertable"
+    );
+    assert(/you.?re full|soft limit of/i.test(html), "friendly full message at soft cap");
+    // Persistent Add after success
+    assert(/clearAddWatchForm/.test(html), "clears add-watch inputs after confirm");
+    assert(/Add another when ready|persistent Add|Add stays/i.test(html) || /clearAddWatchForm/.test(html), "Add remains usable after success");
+    // Reload from Service A list API
+    assert(/loadWatchesFromServer/.test(html), "reload helper present");
+    assert(
+      /\/customers\/.*watch-targets|\/watch-targets/.test(html),
+      "uses GET /customers/:id/watch-targets"
+    );
+    // Soft cap does not hard-cap API at 1
+    assert(!/FE_WATCH_SOFT_CAP\s*=\s*1\b/.test(html), "must not hard-cap FE at 1");
+    assert(/FE_WATCH_SOFT_CAP\s*=\s*5/.test(html), "soft cap is 5 not 1");
+    // Keep Wave 13/14 markers
+    assert(/Demo \/ pilot checkout — not a live charge/.test(html), "honesty chip preserved");
+    assert(/id=["']landingView["']/.test(html) && /id=["']appView["']/.test(html), "Wave 14 views preserved");
+    assert(!/\bladder\b/i.test(html), "must not say ladder");
+  });
+
   await test("docs/fe-b2b.md documents Service A + stub test-only + GIS primary", () => {
     const docs = path.join(PROJECT_ROOT, "docs", "fe-b2b.md");
     assert(fs.existsSync(docs), "docs/fe-b2b.md missing");
@@ -529,6 +561,8 @@ async function main() {
     assert(/never.*secret.*FE|NEVER.*secret/i.test(text), "never secret in FE documented");
     assert(/landing|signed-out|Wave 14/i.test(text), "docs Wave 14 landing split");
     assert(/Continue with Google|signed-in app/i.test(text), "docs landing CTA / app");
+    assert(/FE_WATCH_SOFT_CAP|soft UI cap|Your watches/i.test(text), "docs Wave 15 soft cap / list");
+    assert(/watch-targets/i.test(text), "docs reload via watch-targets");
   });
 
   // ── (a) missing auth → clear error ─────────────────────────────
