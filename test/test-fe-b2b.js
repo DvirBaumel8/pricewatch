@@ -30,9 +30,7 @@ const LAB_HTML = fs.readFileSync(
 );
 
 process.env.AUTH_STUB = "1";
-if (!process.env.JWT_SECRET) {
-  process.env.JWT_SECRET = "wave7-fe-b2b-test-jwt-not-for-prod";
-}
+// JWT_SECRET: rely on AUTH_STUB default in src/auth.js (test-only; never set a literal secret here).
 
 let passed = 0;
 let failed = 0;
