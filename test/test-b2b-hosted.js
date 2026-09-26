@@ -789,6 +789,63 @@ async function main() {
     restoreModuleCache();
   });
 
+  await testAsync("SHAME-B (a): host-named file (plausible-io.json) ≠ id-named lookup (plausible-io-8e774063) → Neon resolves", async () => {
+    const mockPool = createMockDb();
+    const realSkillId = "plausible-io-8e774063";
+    const hostNamedFile = path.join(PROJECT_ROOT, "data", "skills", "plausible-io.json");
+    const idNamedFile = path.join(PROJECT_ROOT, "data", "skills", `${realSkillId}.json`);
+
+    assert(fs.existsSync(hostNamedFile), "plausible-io.json must exist in data/skills/ (committed)");
+    assert(!fs.existsSync(idNamedFile), `${realSkillId}.json must NOT exist — file is host-named`);
+
+    const skillPayload = JSON.parse(fs.readFileSync(hostNamedFile, "utf8"));
+
+    addMockSkill(mockPool, skillPayload);
+    injectMockDb(mockPool);
+
+    const { loadSkillById } = require("../src/skill-store");
+    const loaded = await loadSkillById(skillPayload.id);
+
+    assert(loaded !== null, "loadSkillById must resolve from Neon when id-named file is absent");
+    assert(loaded.id === skillPayload.id, `loaded id must match: expected ${skillPayload.id}`);
+    assert(loaded.pricing_url === skillPayload.pricing_url, "pricing_url must match");
+    assert(loaded.site === skillPayload.site, "site must match");
+
+    restoreModuleCache();
+  });
+
+  await testAsync("SHAME-B (a): runMonitorCheck with host-named file mismatch → Neon fallback, NOT ops-alert", async () => {
+    const mockPool = createMockDb();
+    const hostNamedFile = path.join(PROJECT_ROOT, "data", "skills", "plausible-io.json");
+    const skillPayload = JSON.parse(fs.readFileSync(hostNamedFile, "utf8"));
+    const realSkillId = skillPayload.id;
+    const idNamedFile = path.join(PROJECT_ROOT, "data", "skills", `${realSkillId}.json`);
+
+    assert(!fs.existsSync(idNamedFile), `${realSkillId}.json must NOT exist — proves Neon fallback`);
+
+    addMockSkill(mockPool, skillPayload);
+    injectMockDb(mockPool);
+
+    const { runMonitorCheck } = require("../src/monitor-lib");
+    const skillPath = `data/skills/${realSkillId}.json`;
+    const result = await runMonitorCheck(realSkillId, {
+      skillPath,
+      customerInfo: { customerId: "cust-boris", customerEmail: "boris@test.dev", customerName: "Boris" },
+    });
+
+    assert(result.status !== "error" || !result.error.includes("Skill not found"),
+      `must NOT return 'Skill not found' — Neon fallback must resolve the skill (got: ${result.status} / ${result.error || ""})`);
+
+    if (result.opsAlertPath) {
+      const opsAlert = JSON.parse(fs.readFileSync(result.opsAlertPath, "utf8"));
+      assert(opsAlert.type !== "ops_alert" || !opsAlert.error.includes("Skill not found"),
+        "ops-alert must NOT be about missing skill when Neon has it");
+    }
+
+    cleanOutbox();
+    restoreModuleCache();
+  });
+
   // ── Phase B shame (b): change fixture → customer price_change (NOT ops-alert) ──
   console.log("\n--- Phase B shame (b): change fixture → customer price_change (NOT ops-alert) ---\n");
 
