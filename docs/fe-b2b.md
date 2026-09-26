@@ -2,7 +2,7 @@
 
 Wave 7 thin front-end for B2B pilots. Clickable shell that talks to **Service A HTTP APIs only**. No second backend, no client-invented watches, 0 LLM.
 
-Live Google OAuth consent UI remains **PARKED** (Wave 6 Phase B). Fail-closed when Google code/keys are missing.
+Primary login UX is the **Google Sign-In (GIS) button** (Wave 12b). Fail-closed when Google code/keys are missing. **NEVER** put `GOOGLE_CLIENT_SECRET` (or any secret) in FE HTML, JS, git, or docs values.
 
 ## Run (local)
 
@@ -39,11 +39,17 @@ Open the FE URL. The FE server serves `public/fe-b2b/` and **reverse-proxies** `
 
 Override API target from the browser with `?api=http://127.0.0.1:3850` (direct; may need CORS).
 
-## Login hook
+## Login hook — Google Sign-In (GIS) primary
 
-1. FE calls `GET /health` → reads `auth_mode` (`stub` | `google`).
-2. **`auth_mode=google`:** UI asks for a Google authorization code → `POST /auth/login` with `{ code }`. Missing code → structured `google_code_required` (fail-closed). UI does **not** pretend Google succeeded without a code.
-3. **`auth_mode=stub`:** shows a clearly labeled **test-only** stub form (`google_subject` + `email`). **Never claim stub as production Google.** Do not set `AUTH_STUB=1` on Render.
+1. FE calls `GET /health` → reads `auth_mode` (`stub` | `google`) and `google_client_id` (public, safe — only the client ID, never the secret).
+2. **`auth_mode=google` + `google_client_id` present:** loads Google Identity Services (`https://accounts.google.com/gsi/client`), initializes `google.accounts.oauth2.initCodeClient` with the client ID, and renders a **Sign in with Google** button. On click, Google shows the consent popup; the callback receives an authorization `code` → `POST /auth/login { code }` → JWT session. Redirect alignment: GIS `ux_mode: "popup"` uses `redirect_uri=postmessage` implicitly, which matches the backend default (`GOOGLE_REDIRECT_URI` unset → `postmessage`).
+3. **`auth_mode=google` + no `google_client_id`:** fail-closed error — "Google client ID not configured. Sign-in unavailable." No silent fallback.
+4. **`auth_mode=stub`:** shows a clearly labeled **test-only** stub form (`google_subject` + `email`). **Never claim stub as production Google.** Do not set `AUTH_STUB=1` on Render.
+5. A secondary **dev-only** collapsible allows pasting an authorization code manually (for testing/debugging). This is not the primary UX.
+
+### Client ID — public config only
+
+`GOOGLE_CLIENT_ID` is exposed on `GET /health` as `google_client_id`. This is safe — client IDs are public by design (they appear in every browser's OAuth redirect URL). **NEVER** expose `GOOGLE_CLIENT_SECRET` or `JWT_SECRET` in FE HTML, JS, git, or docs values.
 
 ## Add-watch flow
 
@@ -57,7 +63,6 @@ Override API target from the browser with `?api=http://127.0.0.1:3850` (direct; 
 - Not FE-B2C
 - Not a second API / intake fork
 - Not product accept / production-ready
-- Not live Google unlock (Wave 6 Phase B stays parked)
 
 ## Hosted on Service A (Wave 8)
 
@@ -69,7 +74,7 @@ https://pricewatch-9cja.onrender.com/fe-b2b/
 
 Service A serves `public/fe-b2b/` at `/fe-b2b/` (and `/fe-b2b/index.html`). Trailing slash OK. Existing API routes (`/health`, `/auth`, `/b2b`, `/customers`, …) are unchanged.
 
-**Same-origin happy path:** open the hosted URL — the FE calls `/health`, `/auth`, `/b2b`, `/customers` on the **same host**. No `?api=` required. Live Google OAuth remains PARKED; do **not** set `AUTH_STUB=1` on Render.
+**Same-origin happy path:** open the hosted URL — the FE calls `/health`, `/auth`, `/b2b`, `/customers` on the **same host**. No `?api=` required. Google Sign-In (GIS) button is the primary login UX. Do **not** set `AUTH_STUB=1` on Render.
 
 ## Theme
 
