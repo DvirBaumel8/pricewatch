@@ -10,7 +10,13 @@ name: Daily Cron
 on:
   schedule:
     - cron: "0 3 * * *"
-  workflow_dispatch:     # manual one-shot trigger for proof / re-gate
+  workflow_dispatch:
+    inputs:
+      seed_allowlisted_proof:
+        description: "Seed one allowlisted outbox entry for live Resend proof (default: false)"
+        required: false
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -63,6 +69,12 @@ jobs:
       - name: Install dependencies
         if: steps.arm.outputs.armed == 'true'
         run: npm ci
+
+      - name: Seed allowlisted outbox (dispatch-only)
+        if: steps.arm.outputs.armed == 'true' && github.event_name == 'workflow_dispatch' && inputs.seed_allowlisted_proof == true
+        env:
+          PRICEWATCH_TEST_EMAIL: ${{ secrets.PRICEWATCH_TEST_EMAIL }}
+        run: node scripts/seed-allowlisted-outbox.js
 
       - name: Run daily pipeline
         if: steps.arm.outputs.armed == 'true'
