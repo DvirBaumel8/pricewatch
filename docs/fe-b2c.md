@@ -59,12 +59,18 @@ Service A serves `public/fe-b2c/` at `/fe-b2c/` (and `/fe-b2c/index.html`). Trai
 
 **Same-origin happy path:** open the hosted URL — the FE calls `/health`, `/auth`, `/product-offers`, `/watch-targets`, `/b2c/slots`, `/customers`, `/r/:id` on the **same host**. No `?api=` required. Live Google OAuth remains PARKED; do **not** set `AUTH_STUB=1` on Render.
 
+## Theme
+
+Default theme is **light** (Wave 10). Shared CSS tokens live in `public/fe-shared/theme.css`, imported by both FE-B2B and FE-B2C via `<link>`. Per-FE accent overrides are in each HTML's inline `<style>`. Service A serves `/fe-shared/*` with the same path-traversal rules as `/fe-b2b/` and `/fe-b2c/`.
+
 ## Static serve path
 
 | Path | Role |
 |---|---|
 | `public/fe-b2c/` | Static HTML/JS for the thin B2C UI |
+| `public/fe-shared/theme.css` | Shared light theme tokens (Wave 10) |
 | Service A `GET /fe-b2c/` | Hosted static serve (Wave 9) |
+| Service A `GET /fe-shared/*` | Shared FE assets (Wave 10) |
 | `scripts/fe-b2c-server.js` | Local-only static server + reverse-proxy to Service A |
 | `npm run fe-b2c` | Starts the local FE shell |
 
