@@ -38,6 +38,7 @@
  *   GET  /fe-b2b/*                          → safe static files under public/fe-b2b
  *   GET  /fe-b2c/                           → Thin FE-B2C static UI (public/fe-b2c)
  *   GET  /fe-b2c/*                          → safe static files under public/fe-b2c
+ *   GET  /fe-shared/*                       → shared FE assets (public/fe-shared, e.g. theme.css)
  *
  * See docs/f5-auth.md for env vars, stub vs real OAuth, and route details.
  * See docs/f4-intake.md for intake preview/confirm details.
@@ -63,6 +64,9 @@ const FE_B2B_ROOT = path.join(__dirname, "..", "public", "fe-b2b");
 
 /** Thin FE-B2C static root (Wave 9 — hosted on Service A at /fe-b2c/). */
 const FE_B2C_ROOT = path.join(__dirname, "..", "public", "fe-b2c");
+
+/** Shared FE assets root (Wave 10 — light theme CSS shared by B2B + B2C). */
+const FE_SHARED_ROOT = path.join(__dirname, "..", "public", "fe-shared");
 
 const FE_STATIC_MIME = {
   ".html": "text/html; charset=utf-8",
@@ -178,6 +182,67 @@ function resolveFeB2cStatic(reqUrl) {
 }
 
 function serveFeB2cStatic(req, res, resolved) {
+  if (resolved.bad) {
+    res.writeHead(400, { "Content-Type": "text/plain; charset=utf-8" });
+    res.end("Bad path");
+    return;
+  }
+  const filePath = resolved.filePath;
+  if (!fs.existsSync(filePath) || !fs.statSync(filePath).isFile()) {
+    res.writeHead(404, { "Content-Type": "text/plain; charset=utf-8" });
+    res.end("Not found");
+    return;
+  }
+  const ext = path.extname(filePath).toLowerCase();
+  const type = FE_STATIC_MIME[ext] || "application/octet-stream";
+  const body = fs.readFileSync(filePath);
+  const headers = {
+    "Content-Type": type,
+    "Content-Length": body.length,
+    "Cache-Control": "no-store",
+  };
+  if (req.method === "HEAD") {
+    res.writeHead(200, headers);
+    res.end();
+    return;
+  }
+  res.writeHead(200, headers);
+  res.end(body);
+}
+
+/**
+ * Resolve a /fe-shared URL to a file under public/fe-shared (no path traversal).
+ * Returns { filePath } | { bad: true } | null (not an FE-shared path).
+ */
+function resolveFeSharedStatic(reqUrl) {
+  const pathStr = String(reqUrl || "/").split("?")[0];
+  if (!pathStr.startsWith("/fe-shared/")) {
+    return null;
+  }
+  let rel = pathStr.slice("/fe-shared/".length);
+  try {
+    rel = decodeURIComponent(rel);
+  } catch {
+    return { bad: true };
+  }
+  rel = rel.replace(/\0/g, "");
+  if (!rel || rel.endsWith("/")) {
+    return { bad: true };
+  }
+  if (rel.includes("..") || path.isAbsolute(rel) || rel.startsWith("/") || rel.includes("\\")) {
+    return { bad: true };
+  }
+  const full = path.normalize(path.join(FE_SHARED_ROOT, rel));
+  const rootWithSep = FE_SHARED_ROOT.endsWith(path.sep)
+    ? FE_SHARED_ROOT
+    : FE_SHARED_ROOT + path.sep;
+  if (!full.startsWith(rootWithSep)) {
+    return { bad: true };
+  }
+  return { filePath: full };
+}
+
+function serveFeSharedStatic(req, res, resolved) {
   if (resolved.bad) {
     res.writeHead(400, { "Content-Type": "text/plain; charset=utf-8" });
     res.end("Bad path");
@@ -341,7 +406,7 @@ async function ensureCustomerExists(customerId) {
 }
 
 async function handleRequest(req, res) {
-  // Wave 8/9: public Thin FE static at /fe-b2b/ and /fe-b2c/ (before API routing; no auth).
+  // Wave 8/9/10: public Thin FE static at /fe-b2b/, /fe-b2c/, /fe-shared/ (before API routing; no auth).
   if (req.method === "GET" || req.method === "HEAD") {
     const feB2b = resolveFeB2bStatic(req.url);
     if (feB2b) {
@@ -350,6 +415,10 @@ async function handleRequest(req, res) {
     const feB2c = resolveFeB2cStatic(req.url);
     if (feB2c) {
       return serveFeB2cStatic(req, res, feB2c);
+    }
+    const feShared = resolveFeSharedStatic(req.url);
+    if (feShared) {
+      return serveFeSharedStatic(req, res, feShared);
     }
   }
 
@@ -1028,4 +1097,6 @@ module.exports = {
   FE_B2B_ROOT,
   resolveFeB2cStatic,
   FE_B2C_ROOT,
+  resolveFeSharedStatic,
+  FE_SHARED_ROOT,
 };

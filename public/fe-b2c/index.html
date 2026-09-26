@@ -4,99 +4,21 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>PriceWatch — B2C (thin)</title>
+  <link rel="stylesheet" href="/fe-shared/theme.css">
   <style>
     :root {
-      --bg: #0a0b10;
-      --panel: #12151f;
-      --border: #262a36;
-      --text: #f2f3f7;
-      --muted: #9aa3b5;
-      --dim: #6b7385;
-      --accent: #3ecf8e;
-      --accent-2: #5de0a5;
-      --accent-b: #6d7cff;
-      --good: #3ecf8e;
-      --warn: #f0b429;
-      --danger: #ff6b6b;
-      --font: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+      --accent: #087f5b; --accent-2: #099268;
+      --accent-b: #4c6ef5;
+      --chip-bg: #e6fcf5; --chip-text: #087f5b;
     }
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    body {
-      font-family: var(--font);
-      background: var(--bg);
-      color: var(--text);
-      min-height: 100vh;
-      padding: 32px 16px 64px;
-    }
-    .wrap { max-width: 720px; margin: 0 auto; }
-    .brand { display: flex; align-items: center; gap: 12px; margin-bottom: 8px; }
-    .mark {
-      width: 36px; height: 36px; border-radius: 10px;
-      background: linear-gradient(135deg, #3ecf8e, #1a9f63);
-      display: grid; place-items: center; font-weight: 800; color: #fff;
-    }
-    h1 { font-size: 1.35rem; font-weight: 700; letter-spacing: -0.02em; }
-    .tag { color: var(--dim); font-size: 0.9rem; margin-bottom: 24px; }
-    .card {
-      background: var(--panel);
-      border: 1px solid var(--border);
-      border-radius: 14px;
-      padding: 20px;
-      margin-bottom: 16px;
-    }
-    .card h2 {
-      font-size: 0.72rem; font-weight: 700; letter-spacing: 0.08em;
-      text-transform: uppercase; color: var(--dim); margin-bottom: 14px;
-    }
-    label { display: block; font-size: 0.85rem; color: var(--muted); margin-bottom: 6px; }
-    input[type="text"], input[type="email"], input[type="url"], input[type="password"] {
-      width: 100%; background: #0f1117; border: 1px solid var(--border);
-      color: var(--text); border-radius: 10px; padding: 12px 14px;
-      font-size: 1rem; outline: none; margin-bottom: 12px;
-    }
-    input:focus { border-color: var(--accent); }
-    .row { display: flex; gap: 10px; flex-wrap: wrap; }
-    .row > * { flex: 1; min-width: 140px; }
-    .btn {
-      border: none; border-radius: 10px; padding: 12px 16px;
-      font-size: 0.95rem; font-weight: 650; cursor: pointer;
-      transition: background 0.15s, opacity 0.15s;
-    }
-    .btn:disabled { opacity: 0.4; cursor: not-allowed; }
-    .btn-primary { background: var(--accent); color: #0a0b10; }
-    .btn-primary:hover:not(:disabled) { background: var(--accent-2); }
-    .btn-ghost {
-      background: #151822; color: var(--text); border: 1px solid var(--border);
-    }
-    .btn-ghost:hover:not(:disabled) { border-color: #3a4154; }
+    .wrap { max-width: 720px; }
+    .mark { background: linear-gradient(135deg, #099268, #087f5b); }
     .btn-cta {
       background: var(--accent-b); color: #fff; text-decoration: none;
       display: inline-block; padding: 10px 14px; border-radius: 10px;
       font-size: 0.9rem; font-weight: 650;
     }
     .btn-cta:hover { filter: brightness(1.08); }
-    .status {
-      min-height: 1.4em; font-size: 0.92rem; color: var(--muted);
-      margin-top: 10px; white-space: pre-wrap;
-    }
-    .status.ok { color: var(--good); }
-    .status.warn { color: var(--warn); }
-    .status.err { color: var(--danger); }
-    .banner {
-      border-radius: 10px; padding: 12px 14px; margin-bottom: 16px;
-      font-size: 0.92rem; line-height: 1.45;
-    }
-    .banner.warn { background: #2a1f12; border: 1px solid #5a3d18; color: var(--warn); }
-    .banner.info { background: #12201a; border: 1px solid #2a4638; color: var(--accent-2); }
-    .banner.err { background: #2a1216; border: 1px solid #5a2430; color: var(--danger); }
-    .banner.ok { background: #12201a; border: 1px solid #2a4638; color: #9fd6b8; }
-    .hidden { display: none !important; }
-    .chip {
-      display: inline-flex; align-items: center; gap: 6px;
-      background: #1a2a22; color: var(--accent-2);
-      border-radius: 999px; padding: 4px 10px;
-      font-size: 0.8rem; font-weight: 600; margin-left: 8px;
-    }
     .slots {
       display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 12px;
       font-size: 0.9rem; color: var(--muted);
@@ -104,7 +26,7 @@
     .slots strong { color: var(--text); }
     .offer-list { display: flex; flex-direction: column; gap: 12px; margin-top: 8px; }
     .offer-card {
-      background: #0f1117; border: 1px solid var(--border);
+      background: var(--row-bg); border: 1px solid var(--row-border);
       border-radius: 12px; padding: 16px;
     }
     .offer-card h3 { font-size: 1.05rem; margin-bottom: 6px; }
@@ -114,9 +36,6 @@
       margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border);
     }
     .offer-actions { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
-    .user-line { color: var(--muted); font-size: 0.9rem; margin-bottom: 8px; }
-    .note { color: var(--dim); font-size: 0.82rem; margin-top: 8px; line-height: 1.4; }
-    code { font-size: 0.85em; background: #1a1d28; padding: 1px 6px; border-radius: 4px; }
   </style>
 </head>
 <body>

@@ -31,6 +31,7 @@ const { URL } = require("url");
 
 const PROJECT_ROOT = path.join(__dirname, "..");
 const STATIC_ROOT = path.join(PROJECT_ROOT, "public", "fe-b2b");
+const FE_SHARED_ROOT = path.join(PROJECT_ROOT, "public", "fe-shared");
 
 const PORT = parseInt(
   process.argv.find((_, i, a) => a[i - 1] === "--port") ||
@@ -90,6 +91,37 @@ function safeStaticPath(urlPath) {
 
 function serveStatic(req, res, urlPath) {
   const filePath = safeStaticPath(urlPath);
+  if (!filePath) {
+    sendText(res, 400, "Bad path");
+    return;
+  }
+  if (!fs.existsSync(filePath) || !fs.statSync(filePath).isFile()) {
+    sendText(res, 404, "Not found");
+    return;
+  }
+  const ext = path.extname(filePath).toLowerCase();
+  const type = MIME[ext] || "application/octet-stream";
+  const body = fs.readFileSync(filePath);
+  res.writeHead(200, {
+    "Content-Type": type,
+    "Content-Length": body.length,
+    "Cache-Control": "no-store",
+  });
+  res.end(body);
+}
+
+function safeSharedPath(urlPath) {
+  let rel = urlPath.replace(/^\/fe-shared\//, "");
+  try { rel = decodeURIComponent(rel); } catch { return null; }
+  rel = rel.replace(/\0/g, "");
+  if (!rel || rel.includes("..") || path.isAbsolute(rel)) return null;
+  const full = path.normalize(path.join(FE_SHARED_ROOT, rel));
+  if (!full.startsWith(FE_SHARED_ROOT)) return null;
+  return full;
+}
+
+function serveSharedStatic(req, res, urlPath) {
+  const filePath = safeSharedPath(urlPath);
   if (!filePath) {
     sendText(res, 400, "Bad path");
     return;
@@ -181,6 +213,10 @@ const server = http.createServer((req, res) => {
   }
 
   if (req.method === "GET" || req.method === "HEAD") {
+    if (pathname.startsWith("/fe-shared/")) {
+      serveSharedStatic(req, res, pathname);
+      return;
+    }
     if (pathname === "/fe-b2b" || pathname === "/fe-b2b/") {
       serveStatic(req, res, "/");
       return;
