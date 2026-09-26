@@ -34,12 +34,16 @@
  *
  * Public (no auth):
  *   GET  /r/:id                             → affiliate redirect (click log + 302)
+ *   GET  /fe-b2b/                           → Thin FE-B2B static UI (public/fe-b2b)
+ *   GET  /fe-b2b/*                          → safe static files under public/fe-b2b
  *
  * See docs/f5-auth.md for env vars, stub vs real OAuth, and route details.
  * See docs/f4-intake.md for intake preview/confirm details.
  * See docs/f6-b2c-stubs.md for B2C slot enforcement, payment stub, /r/:id.
  */
 const http = require("http");
+const fs = require("fs");
+const path = require("path");
 const customers = require("./customer-store");
 const watchTargets = require("./watch-target-store");
 const queue = require("./queue");
@@ -51,6 +55,87 @@ const slotStore = require("./slot-store");
 
 const PORT = parseInt(process.env.SERVICE_A_PORT || "3850", 10);
 const HOST = process.env.SERVICE_A_HOST || "127.0.0.1";
+
+/** Thin FE-B2B static root (Wave 8 — hosted on Service A at /fe-b2b/). */
+const FE_B2B_ROOT = path.join(__dirname, "..", "public", "fe-b2b");
+
+const FE_B2B_MIME = {
+  ".html": "text/html; charset=utf-8",
+  ".js": "application/javascript; charset=utf-8",
+  ".css": "text/css; charset=utf-8",
+  ".json": "application/json; charset=utf-8",
+  ".svg": "image/svg+xml",
+  ".ico": "image/x-icon",
+  ".png": "image/png",
+  ".map": "application/json; charset=utf-8",
+  ".txt": "text/plain; charset=utf-8",
+  ".webp": "image/webp",
+};
+
+/**
+ * Resolve a /fe-b2b URL to a file under public/fe-b2b (no path traversal).
+ * Returns { filePath } | { bad: true } | null (not an FE-B2B path).
+ */
+function resolveFeB2bStatic(reqUrl) {
+  const pathStr = String(reqUrl || "/").split("?")[0];
+  if (pathStr !== "/fe-b2b" && !pathStr.startsWith("/fe-b2b/")) {
+    return null;
+  }
+  let rel =
+    pathStr === "/fe-b2b" || pathStr === "/fe-b2b/"
+      ? "index.html"
+      : pathStr.slice("/fe-b2b/".length);
+  try {
+    rel = decodeURIComponent(rel);
+  } catch {
+    return { bad: true };
+  }
+  rel = rel.replace(/\0/g, "");
+  if (!rel || rel.endsWith("/")) {
+    rel = path.posix.join(rel || "", "index.html");
+  }
+  // Reject absolute / escaped segments before join.
+  if (rel.includes("..") || path.isAbsolute(rel) || rel.startsWith("/") || rel.includes("\\")) {
+    return { bad: true };
+  }
+  const full = path.normalize(path.join(FE_B2B_ROOT, rel));
+  const rootWithSep = FE_B2B_ROOT.endsWith(path.sep)
+    ? FE_B2B_ROOT
+    : FE_B2B_ROOT + path.sep;
+  if (full !== FE_B2B_ROOT && !full.startsWith(rootWithSep)) {
+    return { bad: true };
+  }
+  return { filePath: full };
+}
+
+function serveFeB2bStatic(req, res, resolved) {
+  if (resolved.bad) {
+    res.writeHead(400, { "Content-Type": "text/plain; charset=utf-8" });
+    res.end("Bad path");
+    return;
+  }
+  const filePath = resolved.filePath;
+  if (!fs.existsSync(filePath) || !fs.statSync(filePath).isFile()) {
+    res.writeHead(404, { "Content-Type": "text/plain; charset=utf-8" });
+    res.end("Not found");
+    return;
+  }
+  const ext = path.extname(filePath).toLowerCase();
+  const type = FE_B2B_MIME[ext] || "application/octet-stream";
+  const body = fs.readFileSync(filePath);
+  const headers = {
+    "Content-Type": type,
+    "Content-Length": body.length,
+    "Cache-Control": "no-store",
+  };
+  if (req.method === "HEAD") {
+    res.writeHead(200, headers);
+    res.end();
+    return;
+  }
+  res.writeHead(200, headers);
+  res.end(body);
+}
 
 function readBody(req) {
   return new Promise((resolve, reject) => {
@@ -186,6 +271,14 @@ async function ensureCustomerExists(customerId) {
 }
 
 async function handleRequest(req, res) {
+  // Wave 8: public Thin FE-B2B static at /fe-b2b/ (before API routing; no auth).
+  if (req.method === "GET" || req.method === "HEAD") {
+    const feStatic = resolveFeB2bStatic(req.url);
+    if (feStatic) {
+      return serveFeB2bStatic(req, res, feStatic);
+    }
+  }
+
   const route = matchRoute(req.method, req.url);
   if (!route) {
     return json(res, 404, { error: "Not found" });
@@ -838,6 +931,7 @@ if (require.main === module) {
     console.log(`  GET  /jobs                            → list jobs`);
     console.log(`  GET  /jobs/:id                        → job detail`);
     console.log(`  GET  /r/:id                           → affiliate redirect (public)`);
+    console.log(`  GET  /fe-b2b/                         → Thin FE-B2B static (public)`);
     console.log(`  GET  /b2c/slots                       → B2C slot info`);
     console.log(`  POST /b2c/payment-stub                → payment stub (test)`);
     console.log(`  GET  /product-offers                  → list product offers`);
@@ -850,4 +944,11 @@ if (require.main === module) {
   });
 }
 
-module.exports = { handleRequest, matchRoute, PUBLIC_HANDLERS, createWatchTargetInternal };
+module.exports = {
+  handleRequest,
+  matchRoute,
+  PUBLIC_HANDLERS,
+  createWatchTargetInternal,
+  resolveFeB2bStatic,
+  FE_B2B_ROOT,
+};

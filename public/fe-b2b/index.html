@@ -187,8 +187,11 @@
   "use strict";
 
   /**
-   * API base: empty string = same origin (fe-b2b-server reverse-proxies to Service A).
-   * Override with ?api=http://127.0.0.1:3850 to call Service A directly (CORS may apply).
+   * API base: empty string = same origin (happy path).
+   * Hosted on Service A at /fe-b2b/: fetch("/health"), "/auth", "/b2b", "/customers"
+   * hit the same host — no ?api= required.
+   * Local npm run fe-b2b: reverse-proxy makes same-origin work the same way.
+   * Optional override: ?api=http://127.0.0.1:3850 (direct; CORS may apply).
    */
   const params = new URLSearchParams(location.search);
   const API_BASE = (params.get("api") || "").replace(/\/$/, "");
