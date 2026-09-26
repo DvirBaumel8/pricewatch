@@ -56,8 +56,18 @@ const intake = require("./intake");
 const productOffers = require("./product-offer-store");
 const slotStore = require("./slot-store");
 
+const { execSync } = require("child_process");
+
 const PORT = parseInt(process.env.SERVICE_A_PORT || "3850", 10);
 const HOST = process.env.SERVICE_A_HOST || "127.0.0.1";
+
+/** Resolve deploy git SHA once at startup (cheap, no runtime cost). */
+const GIT_SHA = (function resolveGitSha() {
+  if (process.env.GIT_SHA) return process.env.GIT_SHA;
+  try {
+    return execSync("git rev-parse HEAD", { encoding: "utf8", timeout: 3000 }).trim();
+  } catch { return "unknown"; }
+})();
 
 /** Thin FE-B2B static root (Wave 8 — hosted on Service A at /fe-b2b/). */
 const FE_B2B_ROOT = path.join(__dirname, "..", "public", "fe-b2b");
@@ -449,6 +459,7 @@ async function handleRequest(req, res) {
         return json(res, 200, {
           status: "ok",
           service: "pricewatch-api",
+          git_sha: GIT_SHA,
           neon: watchTargets.dbAvailable() ? "connected" : "unavailable",
           auth_mode: auth.isStub() ? "stub" : "google",
         });
@@ -1099,4 +1110,5 @@ module.exports = {
   FE_B2C_ROOT,
   resolveFeSharedStatic,
   FE_SHARED_ROOT,
+  GIT_SHA,
 };
