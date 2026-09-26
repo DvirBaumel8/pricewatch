@@ -4,8 +4,11 @@
 /**
  * Service C — monitor worker.
  *
- * Consumes ticks from pendingMonitorTicks queue (data/monitor-ticks.json),
- * runs the monitor check (0 LLM on lab), snapshots, diffs, and writes:
+ * Wave 4: dual-path — Neon ledger when DATABASE_URL is set, file-based
+ * monitor-queue fallback for lab.
+ *
+ * Consumes claimed ledger entries (or pending file ticks), runs the
+ * monitor check (0 LLM on lab), snapshots, diffs, and writes:
  *   - price_change email to outbox/ (customer-facing) on real change
  *   - ops_alert to outbox/ on failure/blocked
  *   - nothing on unchanged price
@@ -20,7 +23,6 @@
 
 const fs = require("fs");
 const path = require("path");
-const monitorQueue = require("../src/monitor-queue");
 const { runMonitorCheck } = require("../src/monitor-lib");
 
 const KILL_FILE = path.join(__dirname, "..", "data", "KILL");
@@ -33,7 +35,135 @@ function isKilled() {
   return false;
 }
 
-async function processTick(tick) {
+function useNeon() {
+  const { getPool } = require("../src/db");
+  return !!getPool();
+}
+
+async function processNeonEntry(entry) {
+  const ledger = require("../src/neon-ledger");
+  const watchTargets = require("../src/watch-target-store");
+  const customers = require("../src/customer-store");
+
+  console.log(`\n[C] Processing ledger entry ${entry.id}`);
+  console.log(`    Watch target: ${entry.watch_target_id}`);
+  console.log(`    Customer: ${entry.customer_id}`);
+  console.log(`    Skill: ${entry.skill_id}`);
+  console.log(`    Day: ${entry.jerusalem_day}`);
+
+  if (isKilled()) {
+    console.log("  [C] Kill switch active — skipping.");
+    await ledger.complete(entry.id, {
+      status: "skipped",
+      result: "kill_switch",
+      reason: "Kill switch active",
+    });
+    return;
+  }
+
+  const wt = await watchTargets.getById(entry.watch_target_id);
+  if (!wt) {
+    console.log(`  [C] WatchTarget ${entry.watch_target_id} not found — marking blocked.`);
+    await ledger.complete(entry.id, {
+      status: "blocked",
+      result: "watch_target_missing",
+      reason: `WatchTarget ${entry.watch_target_id} not found in Neon`,
+    });
+    return;
+  }
+
+  const customer = await customers.getCustomer(entry.customer_id);
+  const customerInfo = {
+    customerId: entry.customer_id,
+    customerEmail: customer ? customer.email : null,
+    customerName: customer ? customer.name : null,
+  };
+
+  const skillId = entry.skill_id || wt.skill_id;
+  if (!skillId) {
+    console.log(`  [C] No skill_id — marking blocked.`);
+    await ledger.complete(entry.id, {
+      status: "blocked",
+      result: "no_skill",
+      reason: "No skill_id on WatchTarget or ledger entry",
+    });
+    return;
+  }
+
+  const skillPath = watchTargets.skillPathFromId(skillId);
+
+  try {
+    const result = await runMonitorCheck(skillId, {
+      skillPath,
+      customerInfo,
+    });
+
+    console.log(`  [C] Result: ${result.status}`);
+
+    if (result.status === "price_changed") {
+      if (result.before && result.after) {
+        console.log(`  [C] PRICE CHANGED: ${result.before.amount} → ${result.after.amount}`);
+      } else if (result.changes) {
+        console.log(`  [C] PLANS CHANGED: ${result.changes.length} signal(s)`);
+      }
+      if (result.emailPath) {
+        console.log(`  [C] Email written: ${result.emailPath}`);
+      }
+      await ledger.complete(entry.id, {
+        status: "success",
+        result: "price_changed",
+        reason: result.before && result.after
+          ? `${result.before.amount} → ${result.after.amount}`
+          : result.reason || "plans_signal",
+      });
+    } else if (result.status === "no_email") {
+      console.log(`  [C] No email: ${result.reason}`);
+      await ledger.complete(entry.id, {
+        status: "success",
+        result: "no_email",
+        reason: result.reason,
+      });
+    } else {
+      console.log(`  [C] Failure: ${result.error}`);
+      if (result.opsAlertPath) {
+        console.log(`  [C] Ops alert: ${result.opsAlertPath}`);
+      }
+      await ledger.complete(entry.id, {
+        status: "failed",
+        result: result.status,
+        reason: result.error,
+      });
+    }
+  } catch (err) {
+    console.error(`  [C] Unexpected error: ${err.message}`);
+    await ledger.complete(entry.id, {
+      status: "failed",
+      result: "error",
+      reason: err.message,
+    });
+  }
+}
+
+async function runNeonOnce() {
+  const ledger = require("../src/neon-ledger");
+  const entries = await ledger.listClaimed();
+  if (entries.length === 0) {
+    console.log("[C] No claimed ledger entries.");
+    return false;
+  }
+  for (const entry of entries) {
+    if (isKilled()) {
+      console.log("[C] Kill switch active mid-processing — stopping.");
+      break;
+    }
+    await processNeonEntry(entry);
+  }
+  return true;
+}
+
+async function processFileTick(tick) {
+  const monitorQueue = require("../src/monitor-queue");
+
   console.log(`\n[C] Processing tick ${tick.id}`);
   console.log(`    Customer: ${tick.customerId} (${tick.customerName || "?"})`);
   console.log(`    Skill: ${tick.skillId}`);
@@ -66,10 +196,10 @@ async function processTick(tick) {
         console.log(`  [C] PRICE CHANGED: ${result.before.amount} → ${result.after.amount}`);
       } else if (result.changes) {
         console.log(`  [C] PLANS CHANGED: ${result.changes.length} signal(s)`);
-      } else {
-        console.log(`  [C] PRICE CHANGED`);
       }
-      console.log(`  [C] Email written: ${result.emailPath}`);
+      if (result.emailPath) {
+        console.log(`  [C] Email written: ${result.emailPath}`);
+      }
       monitorQueue.complete(tick.id, {
         status: "done",
         result: "price_changed",
@@ -105,13 +235,14 @@ async function processTick(tick) {
   }
 }
 
-async function runOnce() {
+async function runFileOnce() {
+  const monitorQueue = require("../src/monitor-queue");
   const tick = monitorQueue.dequeue();
   if (!tick) {
     console.log("[C] No pending ticks.");
     return false;
   }
-  await processTick(tick);
+  await processFileTick(tick);
   return true;
 }
 
@@ -121,13 +252,14 @@ async function runWatch() {
   process.on("SIGINT", () => { running = false; });
   process.on("SIGTERM", () => { running = false; });
 
+  const neon = useNeon();
   while (running) {
     if (isKilled()) {
       console.log("[C] Kill switch active — sleeping...");
       await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
       continue;
     }
-    const hadWork = await runOnce();
+    const hadWork = neon ? await runNeonOnce() : await runFileOnce();
     if (!hadWork && running) {
       await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
     }
@@ -143,18 +275,26 @@ async function main() {
     return;
   }
 
+  const neon = useNeon();
+  console.log(`[C] Mode: ${neon ? "Neon ledger" : "file-based queue"}`);
+
   if (WATCH_MODE) {
     await runWatch();
   } else {
-    const pending = monitorQueue.pendingCount();
-    console.log(`[C] ${pending} pending tick(s) in queue`);
-    let processed = 0;
-    while (true) {
-      const hadWork = await runOnce();
-      if (!hadWork) break;
-      processed++;
+    if (neon) {
+      await runNeonOnce();
+    } else {
+      const monitorQueue = require("../src/monitor-queue");
+      const pending = monitorQueue.pendingCount();
+      console.log(`[C] ${pending} pending tick(s) in queue`);
+      let processed = 0;
+      while (true) {
+        const hadWork = await runFileOnce();
+        if (!hadWork) break;
+        processed++;
+      }
+      console.log(`[C] Processed ${processed} tick(s). Exiting.`);
     }
-    console.log(`[C] Processed ${processed} tick(s). Exiting.`);
   }
 }
 
