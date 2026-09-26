@@ -28,6 +28,16 @@ function isKilled() {
   return false;
 }
 
+function isLabHost(url) {
+  if (!url) return false;
+  try {
+    const parsed = new URL(url);
+    return parsed.hostname === "127.0.0.1" || parsed.hostname === "localhost";
+  } catch {
+    return /^https?:\/\/(127\.0\.0\.1|localhost)(:|\/|$)/i.test(url);
+  }
+}
+
 async function runNeonPath() {
   const { query } = require("../src/db");
   const ledger = require("../src/neon-ledger");
@@ -36,7 +46,7 @@ async function runNeonPath() {
   console.log(`[enqueue-daily] Neon path — Jerusalem date: ${day}`);
 
   const res = await query(
-    `SELECT wt.id, wt.customer_id, wt.skill_id, wt.label
+    `SELECT wt.id, wt.customer_id, wt.skill_id, wt.label, wt.source_url
      FROM watch_targets wt
      WHERE wt.surface = 'b2b' AND wt.status = 'skill_ready'
      ORDER BY wt.created_at ASC`
@@ -47,8 +57,15 @@ async function runNeonPath() {
 
   let claimed = 0;
   let skipped = 0;
+  let labBlocked = 0;
 
   for (const wt of targets) {
+    if (isLabHost(wt.source_url)) {
+      console.log(`  [lab-blocked] ${wt.customer_id} / ${wt.skill_id} (${wt.label}) → localhost source_url skipped for hosted daily`);
+      labBlocked++;
+      continue;
+    }
+
     const result = await ledger.claim({
       watchTargetId: wt.id,
       customerId: wt.customer_id,
@@ -69,7 +86,7 @@ async function runNeonPath() {
     }
   }
 
-  console.log(`[enqueue-daily] Done (Neon): ${claimed} claimed, ${skipped} skipped`);
+  console.log(`[enqueue-daily] Done (Neon): ${claimed} claimed, ${skipped} skipped, ${labBlocked} lab-blocked`);
 }
 
 function runFilePath() {
