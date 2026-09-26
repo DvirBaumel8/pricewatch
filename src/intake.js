@@ -251,7 +251,7 @@ async function confirm(url, selected, userId, customerId, previewResult) {
       selected: selectedKeys.has(c.plan_key),
     }));
 
-    const skillPath = saveSkill({
+    const skillPath = await saveSkill({
       url: trimmed,
       target: plan.plan_key,
       site,

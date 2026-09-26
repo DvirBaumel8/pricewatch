@@ -220,9 +220,31 @@ async function handleRequest(req, res) {
 
       case "authLogin": {
         const body = await readBody(req);
-        const result = await auth.login(body);
-        console.log(`[A] User login: ${result.user.id} (${result.user.email})`);
-        return json(res, 200, { user: result.user, token: result.token });
+        // Fail-closed structured errors (Wave 6 hosted login) — never opaque 500 from bare throw.
+        if (!auth.isStub()) {
+          if (!body || !body.code) {
+            return json(res, 400, {
+              error: "google_code_required",
+              message:
+                "Google authorization code is required. Pass { code } from the Google OAuth redirect.",
+            });
+          }
+        } else if (!body.google_subject || !body.email) {
+          return json(res, 400, {
+            error: "stub_credentials_required",
+            message: "AUTH_STUB mode requires body { google_subject, email }",
+          });
+        }
+        try {
+          const result = await auth.login(body);
+          console.log(`[A] User login: ${result.user.id} (${result.user.email})`);
+          return json(res, 200, { user: result.user, token: result.token });
+        } catch (e) {
+          return json(res, 400, {
+            error: "auth_failed",
+            message: e.message || "Authentication failed",
+          });
+        }
       }
 
       case "authMe": {
@@ -701,6 +723,11 @@ async function createWatchTargetInternal(customerId, body, reqUser) {
     user_id: reqUser ? reqUser.id : null,
   });
 
+  // Wave 6 hosted B2C catalog: known skill → skill_ready (self-serve, no ops plant).
+  const status =
+    body.status ||
+    (surface === "b2c" && skill_id ? "skill_ready" : "pending_onboarding");
+
   const created = await watchTargets.create({
     customer_id: customerId,
     surface,
@@ -710,13 +737,24 @@ async function createWatchTargetInternal(customerId, body, reqUser) {
     plan_key: body.plan_key || null,
     skill_id: skill_id || null,
     product_offer_id: surface === "b2c" ? product_offer_id : null,
-    status: body.status || "pending_onboarding",
+    status,
   });
   if (created.error === "max_watch_targets_reached") {
     return {
       status: 400,
       body: { error: `Maximum ${created.limit} watch targets allowed` },
     };
+  }
+
+  // Hosted path: persist skill + baseline to Neon before response (GHA must load without plant).
+  if (surface === "b2c" && skill_id && watchTargets.dbAvailable()) {
+    const skillStore = require("./skill-store");
+    const ok = await skillStore.ensureSkillAndBaselineInNeon(skill_id);
+    if (!ok) {
+      console.error(
+        `[A] B2C catalog create: could not ensure Neon skill/baseline for ${skill_id}`
+      );
+    }
   }
 
   dualWriteCompetitorFile(customerId, customer, created.watchTarget);
@@ -812,4 +850,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { handleRequest, matchRoute, PUBLIC_HANDLERS };
+module.exports = { handleRequest, matchRoute, PUBLIC_HANDLERS, createWatchTargetInternal };

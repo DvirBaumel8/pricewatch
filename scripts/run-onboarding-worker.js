@@ -222,7 +222,7 @@ async function runDiscovery(url, target) {
       console.log(`  [B] Step ${step.id}: elapsed ${elapsed}ms — ${out ? "hit" : "miss"}`);
 
       if (out && out.price !== undefined) {
-        const skillPath = saveSkill({
+        const skillPath = await saveSkill({
           url,
           target,
           method: step.name === "http-dom" ? "dom" : out.method || step.name,
