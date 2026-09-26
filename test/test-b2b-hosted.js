@@ -1404,7 +1404,10 @@ async function main() {
     );
     assert(src.includes("runNeonPath"), "enqueue script must have a Neon path");
     assert(src.includes("watch_targets"), "Neon path must query watch_targets table");
-    assert(src.includes("surface = 'b2b'"), "Neon path must filter surface=b2b");
+    assert(
+      src.includes("surface IN ('b2b', 'b2c')") || src.includes("surface = 'b2b'"),
+      "Neon path must include surface b2b (Wave 5: IN b2b+b2c)"
+    );
     assert(src.includes("skill_ready"), "Neon path must filter status=skill_ready");
   });
 

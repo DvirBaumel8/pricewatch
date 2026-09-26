@@ -2,10 +2,12 @@
 "use strict";
 
 /**
- * Enqueue daily monitor ticks for all B2B WatchTargets with skill_ready status.
+ * Enqueue daily monitor ticks for B2B + B2C WatchTargets with skill_ready status.
  *
- * Wave 4: reads from Neon watch_targets table — NOT data/customers.json.
+ * Wave 4/5: reads from Neon watch_targets table — NOT data/customers.json.
  * Falls back to file-based monitor-queue when DATABASE_URL is not set (lab only).
+ *
+ * Wave 5: surface IN ('b2b','b2c') — same hosted Neon + ledger spine.
  *
  * Idempotent: at most one claimed ledger row per (watch_target, Jerusalem day).
  * Second run same day → no duplicates (ON CONFLICT DO NOTHING).
@@ -45,15 +47,19 @@ async function runNeonPath() {
 
   console.log(`[enqueue-daily] Neon path — Jerusalem date: ${day}`);
 
+  // Wave 5: both surfaces share the hosted daily path (same ledger).
   const res = await query(
-    `SELECT wt.id, wt.customer_id, wt.skill_id, wt.label, wt.source_url
+    `SELECT wt.id, wt.customer_id, wt.skill_id, wt.label, wt.source_url, wt.surface,
+            wt.product_offer_id
      FROM watch_targets wt
-     WHERE wt.surface = 'b2b' AND wt.status = 'skill_ready'
+     WHERE wt.surface IN ('b2b', 'b2c') AND wt.status = 'skill_ready'
      ORDER BY wt.created_at ASC`
   );
 
   const targets = res.rows;
-  console.log(`[enqueue-daily] Found ${targets.length} b2b skill_ready WatchTarget(s) in Neon`);
+  console.log(
+    `[enqueue-daily] Found ${targets.length} skill_ready WatchTarget(s) in Neon (b2b+b2c)`
+  );
 
   let claimed = 0;
   let skipped = 0;
@@ -61,7 +67,9 @@ async function runNeonPath() {
 
   for (const wt of targets) {
     if (isLabHost(wt.source_url)) {
-      console.log(`  [lab-blocked] ${wt.customer_id} / ${wt.skill_id} (${wt.label}) → localhost source_url skipped for hosted daily`);
+      console.log(
+        `  [lab-blocked] ${wt.surface} ${wt.customer_id} / ${wt.skill_id} (${wt.label}) → localhost source_url skipped for hosted daily`
+      );
       labBlocked++;
       continue;
     }
@@ -78,15 +86,21 @@ async function runNeonPath() {
     }
 
     if (result.created) {
-      console.log(`  [claim] ${wt.customer_id} / ${wt.skill_id} (${wt.label}) → claimed`);
+      console.log(
+        `  [claim] ${wt.surface} ${wt.customer_id} / ${wt.skill_id} (${wt.label}) → claimed`
+      );
       claimed++;
     } else {
-      console.log(`  [skip]  ${wt.customer_id} / ${wt.skill_id} (${wt.label}) → already exists for ${day}`);
+      console.log(
+        `  [skip]  ${wt.surface} ${wt.customer_id} / ${wt.skill_id} (${wt.label}) → already exists for ${day}`
+      );
       skipped++;
     }
   }
 
-  console.log(`[enqueue-daily] Done (Neon): ${claimed} claimed, ${skipped} skipped, ${labBlocked} lab-blocked`);
+  console.log(
+    `[enqueue-daily] Done (Neon): ${claimed} claimed, ${skipped} skipped, ${labBlocked} lab-blocked`
+  );
 }
 
 function runFilePath() {
