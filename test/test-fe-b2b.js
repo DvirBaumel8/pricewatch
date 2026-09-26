@@ -2,7 +2,8 @@
 "use strict";
 
 /**
- * Wave 7 + Wave 13 Demo-ready FE-B2B shame-tests (0 LLM).
+ * Wave 7 + Wave 13 + Wave 14 FE-B2B shame-tests (0 LLM).
+ * Wave 14: signed-out landing vs signed-in app view swap.
  *
  * (a) missing auth → clear error (UI contract + API)
  * (b) preview→confirm happy path against stub/lab (in-memory Neon mock)
@@ -416,7 +417,7 @@ async function main() {
     assert(/google_code_required/.test(html), "must surface google_code_required");
     assert(/AUTH_STUB/.test(html), "must mention AUTH_STUB");
     assert(/test-only|TEST-ONLY|test \/ local/i.test(html), "stub labeled test-only");
-    assert(/gisButtonWrap|gisSignInBtn|Sign in with Google/i.test(html), "GIS Sign-In button is primary UX");
+    assert(/gisButtonWrap|gisSignInBtn|Continue with Google|Sign in with Google/i.test(html), "GIS Continue/Sign-in with Google is primary UX");
     assert(/initCodeClient|google\.accounts\.oauth2/i.test(html), "GIS code client integration present");
     assert(
       /will not pretend Google succeeded/i.test(html),
@@ -455,6 +456,67 @@ async function main() {
     assert(/resultBox|debug-details|Debug details/i.test(html), "optional collapsed debug");
   });
 
+  await test("Wave 14 landing vs app: signed-out landing, signed-in app, no product on landing camera path", () => {
+    const html = fs.readFileSync(FE_HTML, "utf8");
+    // Landing / app view swap
+    assert(/id=["']landingView["']/.test(html), "landingView present");
+    assert(/id=["']appView["']/.test(html), "appView present");
+    assert(/updateView\s*\(/.test(html), "updateView() swaps landing/app");
+    // Default: app hidden, landing visible (signed-out camera path)
+    assert(
+      /id=["']appView["'][^>]*class=["'][^"']*hidden/.test(html) ||
+        /id=["']appView["']\s+class=["']hidden/.test(html),
+      "appView starts hidden (signed-out)"
+    );
+    assert(
+      !/id=["']landingView["'][^>]*class=["'][^"']*hidden/.test(html),
+      "landingView not hidden by default"
+    );
+    // Landing marketing markers
+    assert(/Email when competitor plans and prices change/i.test(html), "landing promise");
+    assert(/How it works/i.test(html), "how it works section");
+    assert(/Continue with Google/i.test(html), "landing GIS CTA");
+    assert(
+      /Sample.*not a live watch|not a live watch/i.test(html),
+      "sample waiting card clearly labeled"
+    );
+    assert(/sampleWaitingCard|sample-label|Sample/i.test(html), "sample card present");
+    // No ladder jargon
+    assert(!/\bladder\b/i.test(html), "must not say ladder");
+    // Product surfaces live inside appView (not on signed-out camera path)
+    const appIdx = html.indexOf('id="appView"');
+    const landIdx = html.indexOf('id="landingView"');
+    assert(appIdx > 0 && landIdx > 0, "both views present with ids");
+    const appSlice = html.slice(appIdx);
+    const landSlice = html.slice(landIdx, appIdx > landIdx ? appIdx : undefined);
+    assert(/id=["']checkoutCard["']/.test(appSlice), "checkout inside appView");
+    assert(/id=["']watchCard["']/.test(appSlice), "add-watch inside appView");
+    assert(/id=["']resultCard["']/.test(appSlice), "live watch/result inside appView");
+    assert(/id=["']honestyChip["']/.test(appSlice), "honesty chip inside appView");
+    assert(
+      !/id=["']checkoutCard["']/.test(landSlice),
+      "no checkout stub on landing camera path"
+    );
+    assert(
+      !/id=["']watchCard["']/.test(landSlice),
+      "no add-watch form on landing camera path"
+    );
+    assert(
+      !/id=["']resultCard["']/.test(landSlice),
+      "no live watch list on landing camera path"
+    );
+    // Dev/stub panels are not primary landing chrome on google camera path
+    // (stub panel exists for AUTH_STUB shame but starts hidden)
+    assert(
+      /id=["']stubPanel["'][^>]*class=["'][^"']*hidden/.test(html),
+      "stubPanel starts hidden"
+    );
+    assert(
+      /id=["']devCodeDetails["'][^>]*class=["'][^"']*hidden/.test(html),
+      "devCodeDetails starts hidden"
+    );
+  });
+
   await test("docs/fe-b2b.md documents Service A + stub test-only + GIS primary", () => {
     const docs = path.join(PROJECT_ROOT, "docs", "fe-b2b.md");
     assert(fs.existsSync(docs), "docs/fe-b2b.md missing");
@@ -465,6 +527,8 @@ async function main() {
     assert(/GIS|Google Sign-In|Google Identity Services/i.test(text), "GIS primary documented");
     assert(/google_client_id|client.id|client ID/i.test(text), "client ID documented");
     assert(/never.*secret.*FE|NEVER.*secret/i.test(text), "never secret in FE documented");
+    assert(/landing|signed-out|Wave 14/i.test(text), "docs Wave 14 landing split");
+    assert(/Continue with Google|signed-in app/i.test(text), "docs landing CTA / app");
   });
 
   // ── (a) missing auth → clear error ─────────────────────────────
@@ -631,7 +695,7 @@ async function main() {
       });
       assert(res.status === 200, `status=${res.status}`);
       assert(/PriceWatch/i.test(res.raw || ""), "HTML body");
-      assert(/Sign in with Google|Start pilot|Add watch/i.test(res.raw || ""), "demo-ready markers");
+      assert(/Continue with Google|Sign in with Google|Start pilot|Add watch|landingView/i.test(res.raw || ""), "demo-ready / landing markers");
     });
 
     await test("SHAME (b): FE proxy health → auth_mode stub", async () => {

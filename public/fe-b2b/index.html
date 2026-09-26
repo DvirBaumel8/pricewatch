@@ -71,131 +71,253 @@
       font-size: 0.78rem; color: var(--muted); white-space: pre-wrap;
       max-height: 180px; overflow: auto;
     }
+    /* Wave 14 — landing */
+    .hero {
+      margin: 8px 0 28px;
+    }
+    .hero h2 {
+      font-size: 1.55rem; font-weight: 750; letter-spacing: -0.03em;
+      line-height: 1.25; margin-bottom: 10px; text-transform: none;
+      color: var(--text);
+    }
+    .hero p {
+      color: var(--muted); font-size: 1.02rem; line-height: 1.5;
+      max-width: 36em;
+    }
+    .how-list {
+      list-style: none; display: flex; flex-direction: column; gap: 12px;
+      margin: 0 0 4px;
+    }
+    .how-list li {
+      display: flex; gap: 12px; align-items: flex-start;
+      background: var(--row-bg); border: 1px solid var(--row-border);
+      border-radius: 10px; padding: 12px 14px;
+    }
+    .how-num {
+      flex-shrink: 0; width: 28px; height: 28px; border-radius: 8px;
+      background: var(--chip-bg); color: var(--chip-text);
+      display: grid; place-items: center; font-weight: 700; font-size: 0.85rem;
+    }
+    .how-list strong { display: block; font-weight: 650; margin-bottom: 2px; }
+    .how-list span { color: var(--dim); font-size: 0.88rem; }
+    .sample-label {
+      display: inline-flex; align-items: center;
+      background: var(--chip-bg); color: var(--chip-text);
+      border-radius: 999px; padding: 4px 10px;
+      font-size: 0.75rem; font-weight: 700; letter-spacing: 0.04em;
+      text-transform: uppercase; margin-bottom: 10px;
+    }
+    .sample-note {
+      color: var(--dim); font-size: 0.82rem; margin-top: 10px;
+    }
+    .cta-card { text-align: center; }
+    .cta-card .btn { min-width: 220px; }
+    .cta-sub {
+      color: var(--dim); font-size: 0.85rem; margin-top: 10px;
+    }
+    .app-bar {
+      display: flex; align-items: center; justify-content: space-between;
+      gap: 12px; margin-bottom: 20px; flex-wrap: wrap;
+    }
+    .app-bar .brand { margin-bottom: 0; }
+    .app-user {
+      color: var(--muted); font-size: 0.88rem;
+    }
   </style>
 </head>
 <body>
   <div class="wrap">
-    <div class="brand">
-      <div class="mark">P</div>
-      <div>
-        <h1>PriceWatch</h1>
-      </div>
-    </div>
-    <p class="tag">Competitor pricing watches with email alerts when plans or prices move.</p>
-
     <div id="authModeBanner" class="banner info hidden" role="status"></div>
     <div id="errorBanner" class="banner err hidden" role="alert"></div>
 
-    <!-- Sign in -->
-    <section class="card" id="loginCard">
-      <h2>Sign in</h2>
-      <p class="user-line" id="userLine">Not signed in.</p>
-
-      <div id="googlePanel" class="hidden">
-        <div id="gisButtonWrap">
-          <button class="btn btn-primary" id="gisSignInBtn" type="button" disabled>Sign in with Google</button>
+    <!-- ========== Wave 14 LANDING (signed-out) ========== -->
+    <div id="landingView" data-view="landing">
+      <div class="brand">
+        <div class="mark">P</div>
+        <div>
+          <h1>PriceWatch</h1>
         </div>
-        <p id="gisStatus" class="status"></p>
-        <!-- Dev paste-code kept in DOM for local shame; hidden entirely when auth_mode=google -->
-        <details id="devCodeDetails" class="hidden" style="margin-top: 12px;">
-          <summary style="cursor:pointer; font-size: 0.82rem; color: var(--dim);">Dev only: paste authorization code</summary>
-          <div style="margin-top: 8px;">
-            <label for="googleCode">Google authorization code</label>
-            <input id="googleCode" type="text" autocomplete="off" spellcheck="false"
-                   placeholder="Paste code from Google OAuth redirect">
-            <button class="btn btn-ghost" id="googleLoginBtn" type="button">Sign in with code</button>
-            <p class="note">Paste a code obtained from a manual OAuth flow. UI will not pretend Google succeeded without a code. Without keys/code, login fails closed with <code>google_code_required</code>.</p>
+      </div>
+
+      <div class="hero">
+        <h2>Email when competitor plans and prices change</h2>
+        <p>
+          Stop refreshing rival pricing pages by hand. PriceWatch watches public
+          competitor pricing pages and emails you when plans or prices move —
+          so you know what changed, not that something vaguely “updated.”
+        </p>
+      </div>
+
+      <section class="card" id="howItWorksCard">
+        <h2>How it works</h2>
+        <ol class="how-list">
+          <li>
+            <span class="how-num">1</span>
+            <div>
+              <strong>Continue with Google</strong>
+              <span>Sign in once. Alerts go to your Google email.</span>
+            </div>
+          </li>
+          <li>
+            <span class="how-num">2</span>
+            <div>
+              <strong>Start a pilot &amp; add a competitor</strong>
+              <span>Paste a public pricing URL. We read the plans and prices.</span>
+            </div>
+          </li>
+          <li>
+            <span class="how-num">3</span>
+            <div>
+              <strong>Get one email when dollars move</strong>
+              <span>Plan name · was · now. Quiet days mean no price change.</span>
+            </div>
+          </li>
+        </ol>
+      </section>
+
+      <section class="card" id="sampleWaitingCard">
+        <h2>What quiet looks like</h2>
+        <div class="sample-label" id="sampleLabel">Sample · not a live watch</div>
+        <div class="watch-product" aria-label="Sample waiting card">
+          <h3>Example Competitor</h3>
+          <p class="watch-url">https://example.com/pricing</p>
+          <div class="quiet-badge">No price change</div>
+          <div class="baseline-plans">
+            <span class="baseline-pill">Starter · $10</span>
+            <span class="baseline-pill">Pro · $25</span>
+            <span class="baseline-pill">Business · $60</span>
           </div>
+          <div class="wait-meta">
+            <div><strong>Last checked</strong> · this morning (Israel)</div>
+            <div><strong>Cadence</strong> · Daily · morning Israel time</div>
+          </div>
+        </div>
+        <p class="sample-note">Illustrative sample only — not connected to a live watch.</p>
+      </section>
+
+      <section class="card cta-card" id="landingCtaCard">
+        <h2>Get started</h2>
+        <div id="googlePanel" class="hidden">
+          <div id="gisButtonWrap">
+            <button class="btn btn-primary" id="gisSignInBtn" type="button" disabled>Continue with Google</button>
+          </div>
+          <p id="gisStatus" class="status"></p>
+          <!-- Dev paste-code kept in DOM for local shame; hidden entirely when auth_mode=google -->
+          <details id="devCodeDetails" class="hidden" style="margin-top: 12px; text-align: left;">
+            <summary style="cursor:pointer; font-size: 0.82rem; color: var(--dim);">Dev only: paste authorization code</summary>
+            <div style="margin-top: 8px;">
+              <label for="googleCode">Google authorization code</label>
+              <input id="googleCode" type="text" autocomplete="off" spellcheck="false"
+                     placeholder="Paste code from Google OAuth redirect">
+              <button class="btn btn-ghost" id="googleLoginBtn" type="button">Sign in with code</button>
+              <p class="note">Paste a code obtained from a manual OAuth flow. UI will not pretend Google succeeded without a code. Without keys/code, login fails closed with <code>google_code_required</code>.</p>
+            </div>
+          </details>
+        </div>
+
+        <div id="stubPanel" class="hidden" style="text-align: left;">
+          <div class="banner warn" style="margin-bottom:12px">
+            AUTH_STUB is active — <strong>test / local shame only</strong>. Never use stub login as production Google.
+          </div>
+          <div class="row">
+            <div>
+              <label for="stubEmail">Email</label>
+              <input id="stubEmail" type="email" value="pilot@example.com" autocomplete="username">
+            </div>
+            <div>
+              <label for="stubSubject">google_subject</label>
+              <input id="stubSubject" type="text" value="stub-pilot-1" autocomplete="off">
+            </div>
+          </div>
+          <button class="btn btn-primary" id="stubLoginBtn" type="button">Stub login (test-only)</button>
+        </div>
+
+        <div id="unknownPanel" class="hidden">
+          <p class="note">Could not reach the sign-in service. Check your connection, then retry.</p>
+          <button class="btn btn-ghost" id="retryHealthBtn" type="button">Retry</button>
+        </div>
+
+        <p class="status" id="loginStatus"></p>
+        <p class="user-line hidden" id="userLine">Not signed in.</p>
+        <p class="cta-sub">Competitor pricing watches with email alerts when plans or prices move.</p>
+      </section>
+    </div>
+
+    <!-- ========== Wave 14 APP (signed-in) — Wave 13 product ========== -->
+    <div id="appView" class="hidden" data-view="app">
+      <div class="app-bar">
+        <div class="brand">
+          <div class="mark">P</div>
+          <div>
+            <h1>PriceWatch</h1>
+          </div>
+        </div>
+        <div class="app-user" id="appUserLine">Signed in</div>
+      </div>
+
+      <!-- Checkout stub (S3) — client-side only; unlocks Add watch -->
+      <section class="card" id="checkoutCard">
+        <h2>Start pilot</h2>
+        <div class="honesty-chip" id="honestyChip">Demo / pilot checkout — not a live charge</div>
+        <div id="checkoutForm">
+          <div class="checkout-plan">
+            <h3>Pilot</h3>
+            <div class="checkout-price">$49<span style="font-size:0.85rem;font-weight:600;color:var(--muted)">/mo</span></div>
+            <p class="checkout-meta">Competitor pricing watches · daily checks · email alerts</p>
+          </div>
+          <button class="btn btn-primary" id="startPilotBtn" type="button" disabled>Start pilot</button>
+          <p class="locked-note" id="checkoutLockedNote">Sign in to start your pilot.</p>
+          <p class="status" id="checkoutStatus"></p>
+        </div>
+        <div id="checkoutSuccess" class="hidden">
+          <div class="banner ok" role="status">You're in — Pilot started.</div>
+          <p class="note" style="margin-top:8px">Pilot active. Add a competitor pricing page below.</p>
+        </div>
+      </section>
+
+      <!-- Add watch -->
+      <section class="card" id="watchCard">
+        <h2>Add watch</h2>
+        <div id="watchLocked" class="locked-note">Start your pilot to add a competitor watch.</div>
+        <div id="watchForm" class="hidden">
+          <label for="rivalName">Competitor name</label>
+          <input id="rivalName" type="text" placeholder="e.g. Linear" autocomplete="organization">
+          <label for="pricingUrl">Competitor pricing URL</label>
+          <input id="pricingUrl" type="url" placeholder="https://…/pricing"
+                 spellcheck="false" autocomplete="off">
+          <label for="intentText">Focus plan (optional)</label>
+          <input id="intentText" type="text" placeholder="e.g. Pro" autocomplete="off">
+          <!-- customerName kept for API POST /customers; not shown as lab "Customer name" -->
+          <input id="customerName" type="hidden" value="Pilot">
+          <div class="row" style="margin-bottom:8px">
+            <button class="btn btn-primary" id="previewBtn" type="button">Preview plans</button>
+            <button class="btn btn-ghost" id="confirmBtn" type="button" disabled>Confirm watch</button>
+          </div>
+          <div id="plansBox" class="plan-list hidden"></div>
+          <p class="status" id="watchStatus"></p>
+          <!-- Server owns allowlist and ownership. Watches are not invented in the browser. -->
+        </div>
+      </section>
+
+      <!-- Watch product card + Waiting Option B (S5/S6) -->
+      <section class="card hidden" id="resultCard">
+        <h2>Your watch</h2>
+        <div id="watchProduct" class="watch-product">
+          <h3 id="watchRivalName">—</h3>
+          <p class="watch-url" id="watchRivalUrl">—</p>
+          <div class="quiet-badge" id="quietBadge">No price change</div>
+          <div class="baseline-plans" id="baselinePlans"></div>
+          <div class="wait-meta">
+            <div><strong>Last checked</strong> · <span id="lastChecked">—</span></div>
+            <div><strong>Cadence</strong> · Daily · morning Israel time</div>
+          </div>
+        </div>
+        <details class="debug-details" id="debugDetails">
+          <summary>Debug details</summary>
+          <pre id="resultBox">—</pre>
         </details>
-      </div>
-
-      <div id="stubPanel" class="hidden">
-        <div class="banner warn" style="margin-bottom:12px">
-          AUTH_STUB is active — <strong>test / local shame only</strong>. Never use stub login as production Google.
-        </div>
-        <div class="row">
-          <div>
-            <label for="stubEmail">Email</label>
-            <input id="stubEmail" type="email" value="pilot@example.com" autocomplete="username">
-          </div>
-          <div>
-            <label for="stubSubject">google_subject</label>
-            <input id="stubSubject" type="text" value="stub-pilot-1" autocomplete="off">
-          </div>
-        </div>
-        <button class="btn btn-primary" id="stubLoginBtn" type="button">Stub login (test-only)</button>
-      </div>
-
-      <div id="unknownPanel" class="hidden">
-        <p class="note">Could not reach the sign-in service. Check your connection, then retry.</p>
-        <button class="btn btn-ghost" id="retryHealthBtn" type="button">Retry</button>
-      </div>
-
-      <p class="status" id="loginStatus"></p>
-    </section>
-
-    <!-- Checkout stub (S3) — client-side only; unlocks Add watch -->
-    <section class="card" id="checkoutCard">
-      <h2>Start pilot</h2>
-      <div class="honesty-chip" id="honestyChip">Demo / pilot checkout — not a live charge</div>
-      <div id="checkoutForm">
-        <div class="checkout-plan">
-          <h3>Pilot</h3>
-          <div class="checkout-price">$49<span style="font-size:0.85rem;font-weight:600;color:var(--muted)">/mo</span></div>
-          <p class="checkout-meta">Competitor pricing watches · daily checks · email alerts</p>
-        </div>
-        <button class="btn btn-primary" id="startPilotBtn" type="button" disabled>Start pilot</button>
-        <p class="locked-note" id="checkoutLockedNote">Sign in to start your pilot.</p>
-        <p class="status" id="checkoutStatus"></p>
-      </div>
-      <div id="checkoutSuccess" class="hidden">
-        <div class="banner ok" role="status">You're in — Pilot started.</div>
-        <p class="note" style="margin-top:8px">Pilot active. Add a competitor pricing page below.</p>
-      </div>
-    </section>
-
-    <!-- Add watch -->
-    <section class="card" id="watchCard">
-      <h2>Add watch</h2>
-      <div id="watchLocked" class="locked-note">Start your pilot to add a competitor watch.</div>
-      <div id="watchForm" class="hidden">
-        <label for="rivalName">Competitor name</label>
-        <input id="rivalName" type="text" placeholder="e.g. Linear" autocomplete="organization">
-        <label for="pricingUrl">Competitor pricing URL</label>
-        <input id="pricingUrl" type="url" placeholder="https://…/pricing"
-               spellcheck="false" autocomplete="off">
-        <label for="intentText">Focus plan (optional)</label>
-        <input id="intentText" type="text" placeholder="e.g. Pro" autocomplete="off">
-        <!-- customerName kept for API POST /customers; not shown as lab "Customer name" -->
-        <input id="customerName" type="hidden" value="Pilot">
-        <div class="row" style="margin-bottom:8px">
-          <button class="btn btn-primary" id="previewBtn" type="button">Preview plans</button>
-          <button class="btn btn-ghost" id="confirmBtn" type="button" disabled>Confirm watch</button>
-        </div>
-        <div id="plansBox" class="plan-list hidden"></div>
-        <p class="status" id="watchStatus"></p>
-        <!-- Server owns allowlist and ownership. Watches are not invented in the browser. -->
-      </div>
-    </section>
-
-    <!-- Watch product card + Waiting Option B (S5/S6) -->
-    <section class="card hidden" id="resultCard">
-      <h2>Your watch</h2>
-      <div id="watchProduct" class="watch-product">
-        <h3 id="watchRivalName">—</h3>
-        <p class="watch-url" id="watchRivalUrl">—</p>
-        <div class="quiet-badge" id="quietBadge">No price change</div>
-        <div class="baseline-plans" id="baselinePlans"></div>
-        <div class="wait-meta">
-          <div><strong>Last checked</strong> · <span id="lastChecked">—</span></div>
-          <div><strong>Cadence</strong> · Daily · morning Israel time</div>
-        </div>
-      </div>
-      <details class="debug-details" id="debugDetails">
-        <summary>Debug details</summary>
-        <pre id="resultBox">—</pre>
-      </details>
-    </section>
+      </section>
+    </div>
   </div>
 
   <script>
@@ -203,6 +325,10 @@
   "use strict";
 
   /**
+   * Wave 14 routes (same page, view swap):
+   *   /fe-b2b/  signed-out → #landingView (marketing + Continue with Google)
+   *   /fe-b2b/  signed-in  → #appView (Wave 13 product: checkout → add watch → Option B)
+   *
    * API base: empty string = same origin (happy path).
    * Hosted at /fe-b2b/: fetch("/health"), "/auth", "/b2b", "/customers"
    * hit the same host — no ?api= required.
@@ -289,6 +415,18 @@
     return data;
   }
 
+  /** Wave 14: signed-out = landing; signed-in = app. No marketing+product on one scroll. */
+  function updateView() {
+    const signedIn = !!(state.token && state.user);
+    if (signedIn) {
+      $("landingView").classList.add("hidden");
+      $("appView").classList.remove("hidden");
+    } else {
+      $("landingView").classList.remove("hidden");
+      $("appView").classList.add("hidden");
+    }
+  }
+
   function updateJourneyGates() {
     const signedIn = !!(state.token && state.user);
     $("startPilotBtn").disabled = !signedIn || state.pilotStarted;
@@ -355,11 +493,15 @@
 
     if (state.user) {
       var email = state.user.email || state.user.notify_email || "signed-in user";
-      $("userLine").textContent =
+      var line =
         "Signed in as " + email + (state.authMode === "stub" ? " · stub session (test-only)" : "");
+      $("userLine").textContent = line;
+      $("appUserLine").textContent = line;
     } else {
       $("userLine").textContent = "Not signed in.";
+      $("appUserLine").textContent = "Signed in";
     }
+    updateView();
     updateJourneyGates();
   }
 
@@ -611,7 +753,7 @@
         showBanner(
           $("authModeBanner"),
           code === "google_code_required"
-            ? "Fail-closed: Google authorization code required. Use Sign in with Google."
+            ? "Fail-closed: Google authorization code required. Use Continue with Google."
             : "Stub login needs google_subject + email (AUTH_STUB test-only).",
           "err"
         );
@@ -759,6 +901,7 @@
     }
   });
 
+  updateView();
   updateJourneyGates();
   refreshHealth().catch(function () {});
 })();

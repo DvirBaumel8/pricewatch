@@ -1,8 +1,8 @@
-# FE-B2B — Demo-ready B2B UI
+# FE-B2B — Marketing landing + signed-in app
 
-Wave 13 demo-ready front-end for B2B pilots (storyboard beats 0–5). Finished product chrome: sign in → honest pilot checkout stub → add competitor watch → quiet Option B waiting card. Talks to **Service A HTTP APIs only**. No second backend, no client-invented watches, 0 LLM, **no Stripe**.
+Wave 14 splits public **marketing landing** from **signed-in product** on the same `/fe-b2b/` URL (view swap). Wave 13 demo-ready product chrome is preserved for the signed-in path. Talks to **Service A HTTP APIs only**. No second backend, no client-invented watches, 0 LLM, **no Stripe**.
 
-Primary login UX is the **Google Sign-In (GIS) button** (Wave 12b). Fail-closed when Google code/keys are missing. **NEVER** put `GOOGLE_CLIENT_SECRET` (or any secret) in FE HTML, JS, git, or docs values.
+Primary login UX is **Continue with Google** (GIS, Wave 12b). Fail-closed when Google code/keys are missing. **NEVER** put `GOOGLE_CLIENT_SECRET` (or any secret) in FE HTML, JS, git, or docs values.
 
 ## Run (local)
 
@@ -39,21 +39,39 @@ Open the FE URL. The FE server serves `public/fe-b2b/` and **reverse-proxies** `
 
 Override API target from the browser with `?api=http://127.0.0.1:3850` (direct; may need CORS).
 
-## Product shell (Wave 13)
+## Routes (Wave 14)
+
+Prefer a single URL with a clear view swap (no separate paid host):
+
+| URL | Auth state | View |
+|---|---|---|
+| `/fe-b2b/` | Signed out | **Landing** — marketing promise, how it works, optional sample waiting card, **Continue with Google** only |
+| `/fe-b2b/` | Signed in (after GIS success) | **App** — Wave 13 product only (honesty chip → Start pilot → You're in → add watch → Option B waiting) |
+
+DOM: `#landingView` (default) ↔ `#appView` (after `POST /auth/login` success). Film beat 0 opens `/fe-b2b/` signed-out; beat 1 continues with Google into the app. No marketing hero competing with app chrome on the same scroll.
+
+## Signed-out landing (Wave 14)
+
+- Promise: email when competitor **plans and prices** change (never say “ladder”).
+- How it works (3 steps).
+- Optional static **sample** waiting card clearly labeled **Sample · not a live watch**.
+- Primary CTA: **Continue with Google** (GIS) only.
+- **No** add-rival form, checkout stub, live watch list, or Dev/stub panels on the google camera path.
+
+## Signed-in app (Wave 13 product, Wave 14 container)
 
 - Brand mark + **PriceWatch** title (no “(thin)” / “B2B thin” chip).
-- Calm tagline: competitor pricing watches / email alerts.
 - No Service A / thin / API jargon on the camera path.
+- Honesty chip → Start pilot → You're in → add watch → Option B waiting.
+- Signed-in state shows the human email (not a raw JSON hero).
 
 ## Login hook — Google Sign-In (GIS) primary
 
 1. FE calls `GET /health` → reads `auth_mode` (`stub` | `google`) and `google_client_id` (public, safe — only the client ID, never the secret).
-2. **`auth_mode=google` + `google_client_id` present:** loads Google Identity Services (`https://accounts.google.com/gsi/client`), initializes `google.accounts.oauth2.initCodeClient` with the client ID, and renders a **Sign in with Google** button. On click, Google shows the consent popup; the callback receives an authorization `code` → `POST /auth/login { code }` → JWT session. Redirect alignment: GIS `ux_mode: "popup"` uses `redirect_uri=postmessage` implicitly, which matches the backend default (`GOOGLE_REDIRECT_URI` unset → `postmessage`). Stub panel and Dev paste-code are **hidden** on this path.
+2. **`auth_mode=google` + `google_client_id` present:** loads Google Identity Services (`https://accounts.google.com/gsi/client`), initializes `google.accounts.oauth2.initCodeClient` with the client ID, and renders a **Continue with Google** button on the landing. On click, Google shows the consent popup; the callback receives an authorization `code` → `POST /auth/login { code }` → JWT session → swaps to **app** view. Redirect alignment: GIS `ux_mode: "popup"` uses `redirect_uri=postmessage` implicitly, which matches the backend default (`GOOGLE_REDIRECT_URI` unset → `postmessage`). Stub panel and Dev paste-code are **hidden** on this path.
 3. **`auth_mode=google` + no `google_client_id`:** fail-closed error — Google sign-in unavailable (`google_code_required`). No silent fallback.
-4. **`auth_mode=stub`:** shows a clearly labeled **test-only** stub form (`google_subject` + `email`). **Never claim stub as production Google.** Do not set `AUTH_STUB=1` on Render.
+4. **`auth_mode=stub`:** shows a clearly labeled **test-only** stub form (`google_subject` + `email`) on the landing for local shame. **Never claim stub as production Google.** Do not set `AUTH_STUB=1` on Render.
 5. A secondary **dev-only** paste-code path remains in the DOM for local shame, but is hidden when `auth_mode=google`.
-
-Signed-in state shows the human email (not a raw JSON hero).
 
 ### Client ID — public config only
 
@@ -131,12 +149,13 @@ Default theme is **light** (Wave 10). Shared CSS tokens live in `public/fe-share
 
 `test/test-fe-b2b.js` (Wave 7 + 13) and `test/test-host-fe-b2b.js` (Wave 8) are wired into `npm test`:
 
-Wave 7 / 13 FE:
+Wave 7 / 13 / 14 FE:
 - (a) missing auth → clear error
 - (b) preview → confirm happy path (stub + lab fixture)
 - (c) Wave 4/5/6 API shame still in `npm test`
 - (d) no secrets in git
 - Wave 13: honesty chip, checkout stub, Option B phrases, product watch card; no lab chrome / Stripe / fake last4 on camera path
+- Wave 14: landing vs app view swap; GIS CTA on landing; no add-watch/checkout/live watches on signed-out camera path; sample card labeled not a live watch
 
 Wave 8 host:
 - (a) Service A static `/fe-b2b/` serves index
