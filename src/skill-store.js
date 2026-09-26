@@ -205,4 +205,55 @@ async function listSkillsWithNeon() {
   return Array.from(byId.values());
 }
 
-module.exports = { saveSkill, neonSaveSkill, loadSkill, loadSkillById, listSkills, listSkillsWithNeon, skillId, dbAvailable, SKILLS_DIR };
+/**
+ * Load skills.baseline from Neon (hosted previous snapshot for compare).
+ * Returns parsed JSON or null when absent / DB unavailable.
+ */
+async function loadBaseline(skillId) {
+  if (!dbAvailable()) return null;
+  try {
+    const res = await query("SELECT baseline FROM skills WHERE id = $1", [skillId]);
+    if (res.rows.length === 0) return null;
+    const baseline = res.rows[0].baseline;
+    if (baseline == null) return null;
+    return typeof baseline === "string" ? JSON.parse(baseline) : baseline;
+  } catch (err) {
+    console.error(`[skill-store] Neon baseline load failed for ${skillId}: ${err.message}`);
+    return null;
+  }
+}
+
+/**
+ * Persist skills.baseline to Neon (overwrite). Used after successful extract.
+ * No-op when DB unavailable or skill row missing.
+ */
+async function saveBaseline(skillId, baseline) {
+  if (!dbAvailable() || baseline == null) return false;
+  try {
+    const res = await query(
+      `UPDATE skills
+       SET baseline = $2::jsonb, updated_at = now()
+       WHERE id = $1
+       RETURNING id`,
+      [skillId, JSON.stringify(baseline)]
+    );
+    return res.rows.length > 0;
+  } catch (err) {
+    console.error(`[skill-store] Neon baseline save failed for ${skillId}: ${err.message}`);
+    return false;
+  }
+}
+
+module.exports = {
+  saveSkill,
+  neonSaveSkill,
+  loadSkill,
+  loadSkillById,
+  loadBaseline,
+  saveBaseline,
+  listSkills,
+  listSkillsWithNeon,
+  skillId,
+  dbAvailable,
+  SKILLS_DIR,
+};

@@ -8,6 +8,8 @@
  * - failure_count increments on fetch_fail / blocked / extract_fail
  * - Empty/invalid extract NEVER writes a price snapshot
  * - Noise gate: single-price amount|currency|period; plans via diffPlanLadders
+ * - When DATABASE_URL set: previous baseline from Neon skills.baseline (prefer over
+ *   empty local data/snapshots); persist new baseline to Neon after successful extract
  * - 0 LLM
  */
 "use strict";
@@ -143,6 +145,171 @@ function saveSnapshot(skillId, price) {
   const snapshotFile = path.join(SNAPSHOTS_DIR, `${skillId}.json`);
   fs.writeFileSync(snapshotFile, JSON.stringify(snapshot, null, 2) + "\n");
   return snapshotFile;
+}
+
+/**
+ * Normalize skills.baseline JSON into a single-price previous snapshot
+ * ({ price: { amount, currency, period } }) or null.
+ * Accepts snapshot shape, raw price, or intake plans array (e.g. Starter $1 plant).
+ */
+function coerceSinglePreviousSnapshot(baseline) {
+  if (baseline == null) return null;
+  let raw = baseline;
+  if (typeof raw === "string") {
+    try {
+      raw = JSON.parse(raw);
+    } catch {
+      return null;
+    }
+  }
+  if (!raw || typeof raw !== "object") return null;
+
+  if (raw.price && typeof raw.price === "object" && raw.price.amount != null && raw.price.amount !== "") {
+    const amount = Number(raw.price.amount);
+    if (!Number.isFinite(amount)) return null;
+    return {
+      skill_id: raw.skill_id || undefined,
+      checked_at: raw.checked_at || undefined,
+      price: {
+        amount,
+        currency: String(raw.price.currency || "USD").toUpperCase(),
+        period: String(raw.price.period || "month").toLowerCase(),
+      },
+    };
+  }
+
+  if (!Array.isArray(raw) && raw.amount != null && raw.amount !== "") {
+    const amount = Number(raw.amount);
+    if (!Number.isFinite(amount)) return null;
+    return {
+      price: {
+        amount,
+        currency: String(raw.currency || "USD").toUpperCase(),
+        period: String(raw.period || "month").toLowerCase(),
+      },
+    };
+  }
+
+  const plans = Array.isArray(raw) ? raw : Array.isArray(raw.plans) ? raw.plans : null;
+  if (plans && plans.length) {
+    const match =
+      plans.find((p) => p && p.selected) ||
+      plans.find((p) => p && /starter/i.test(String(p.plan || p.plan_key || p.name || ""))) ||
+      plans.find((p) => p && p.price != null && p.price !== "") ||
+      plans[0];
+    if (match && match.price != null && match.price !== "") {
+      const amount = Number(match.price);
+      if (!Number.isFinite(amount)) return null;
+      const billing = match.billing || match.period || "month";
+      return {
+        price: {
+          amount,
+          currency: String(match.currency || "USD").toUpperCase(),
+          period: billingToPeriod(billing),
+        },
+      };
+    }
+  }
+  return null;
+}
+
+function coerceLadderPrevious(baseline, site) {
+  if (baseline == null) return null;
+  let raw = baseline;
+  if (typeof raw === "string") {
+    try {
+      raw = JSON.parse(raw);
+    } catch {
+      return null;
+    }
+  }
+  if (!raw) return null;
+  if (Array.isArray(raw)) {
+    return { site, checked_at: null, plans: raw };
+  }
+  if (Array.isArray(raw.plans)) {
+    return {
+      site: raw.site || site,
+      checked_at: raw.checked_at || null,
+      plans: raw.plans,
+    };
+  }
+  return null;
+}
+
+/**
+ * Hosted previous: prefer Neon skills.baseline when DATABASE_URL/pool is set;
+ * fall back to local data/snapshots/<id>.json (lab / offline).
+ */
+async function loadPreviousSingleSnapshot(skillId) {
+  const { dbAvailable, loadBaseline } = require("./skill-store");
+  if (dbAvailable()) {
+    try {
+      const baseline = await loadBaseline(skillId);
+      const coerced = coerceSinglePreviousSnapshot(baseline);
+      if (coerced) return coerced;
+    } catch (err) {
+      console.error(`[monitor] Neon baseline load failed for ${skillId}: ${err.message}`);
+    }
+  }
+  return loadLatestSnapshot(skillId);
+}
+
+/**
+ * Persist single-price snapshot to local file + Neon skills.baseline when DB set.
+ */
+async function persistSingleSnapshot(skillId, price) {
+  const snapshotPath = saveSnapshot(skillId, price);
+  const { dbAvailable, saveBaseline } = require("./skill-store");
+  if (dbAvailable()) {
+    try {
+      await saveBaseline(skillId, {
+        skill_id: skillId,
+        checked_at: new Date().toISOString(),
+        price: {
+          amount: Number(price.amount),
+          currency: (price.currency || "USD").toUpperCase(),
+          period: (price.period || "month").toLowerCase(),
+        },
+      });
+    } catch (err) {
+      console.error(`[monitor] Neon baseline save failed for ${skillId}: ${err.message}`);
+    }
+  }
+  return snapshotPath;
+}
+
+async function loadPreviousLadderSnapshot(site, skillId) {
+  const { dbAvailable, loadBaseline } = require("./skill-store");
+  if (dbAvailable() && skillId) {
+    try {
+      const baseline = await loadBaseline(skillId);
+      const coerced = coerceLadderPrevious(baseline, site);
+      if (coerced) return coerced;
+    } catch (err) {
+      console.error(`[monitor] Neon ladder baseline load failed for ${skillId}: ${err.message}`);
+    }
+  }
+  const { loadLadderSnapshot } = require("./plan-ladder-snapshot");
+  return loadLadderSnapshot(site);
+}
+
+async function persistLadderSnapshot(site, plans, skillId) {
+  const { saveLadderSnapshot } = require("./plan-ladder-snapshot");
+  const snapshotPath = saveLadderSnapshot(site, plans);
+  const { dbAvailable, saveBaseline } = require("./skill-store");
+  if (dbAvailable() && skillId) {
+    try {
+      await saveBaseline(skillId, {
+        site,
+        checked_at: new Date().toISOString(),
+        plans,
+      });
+    } catch (err) {
+      console.error(`[monitor] Neon ladder baseline save failed for ${skillId}: ${err.message}`);
+    }
+  }
+  return snapshotPath;
 }
 
 function priceChanged(prev, curr) {
@@ -330,10 +497,6 @@ async function runPlansMonitorCheck(skill, opts = {}) {
   const pricingUrl = skill.pricing_url;
 
   const { extractPlanLadder } = require("./plan-ladder");
-  const {
-    saveLadderSnapshot,
-    loadLadderSnapshot,
-  } = require("./plan-ladder-snapshot");
   const { diffPlanLadders, filterBySelection } = require("./plan-ladder-diff");
   const { writePlanLadderEmail } = require("./plan-ladder-email");
   const { loadSelection } = require("./plan-selection");
@@ -383,7 +546,7 @@ async function runPlansMonitorCheck(skill, opts = {}) {
   }
 
   const site = result.site || skill.site || "unknown";
-  const prev = loadLadderSnapshot(site);
+  const prev = await loadPreviousLadderSnapshot(site, skillId);
 
   // Selected plan_key → single-plan compare (still via plans extract)
   const planKey = skill.plan_key || skill.plan_name;
@@ -394,7 +557,7 @@ async function runPlansMonitorCheck(skill, opts = {}) {
     if (!match || !isValidPriceAmountSafe(match.price)) {
       if (match && match.price === null) {
         recordSuccess(skillId, { skillPath: opts.skillPath });
-        const snapshotPath = saveLadderSnapshot(site, result.plans);
+        const snapshotPath = await persistLadderSnapshot(site, result.plans, skillId);
         if (!prev) {
           return {
             status: "no_email",
@@ -425,7 +588,7 @@ async function runPlansMonitorCheck(skill, opts = {}) {
     }
 
     recordSuccess(skillId, { skillPath: opts.skillPath });
-    const snapshotPath = saveLadderSnapshot(site, result.plans);
+    const snapshotPath = await persistLadderSnapshot(site, result.plans, skillId);
     const currentPrice = {
       amount: Number(match.price),
       currency: (match.currency || "USD").toUpperCase(),
@@ -445,7 +608,7 @@ async function runPlansMonitorCheck(skill, opts = {}) {
         },
       };
     })();
-    const singleSnap = saveSnapshot(skillId, currentPrice);
+    const singleSnap = await persistSingleSnapshot(skillId, currentPrice);
 
     return finishSingleCompare({
       skill,
@@ -460,7 +623,7 @@ async function runPlansMonitorCheck(skill, opts = {}) {
   }
 
   recordSuccess(skillId, { skillPath: opts.skillPath });
-  const snapshotPath = saveLadderSnapshot(site, result.plans);
+  const snapshotPath = await persistLadderSnapshot(site, result.plans, skillId);
 
   // Full plans diff + noise gate
   if (!prev) {
@@ -708,8 +871,8 @@ async function runMonitorCheck(skillId, opts = {}) {
 
   recordSuccess(skillId, { skillPath: opts.skillPath });
 
-  const lastSnapshot = loadLatestSnapshot(skillId);
-  const snapshotPath = saveSnapshot(skillId, currentPrice);
+  const lastSnapshot = await loadPreviousSingleSnapshot(skillId);
+  const snapshotPath = await persistSingleSnapshot(skillId, currentPrice);
 
   return finishSingleCompare({
     skill,
@@ -732,6 +895,12 @@ module.exports = {
   writeOpsAlert,
   loadLatestSnapshot,
   saveSnapshot,
+  loadPreviousSingleSnapshot,
+  persistSingleSnapshot,
+  loadPreviousLadderSnapshot,
+  persistLadderSnapshot,
+  coerceSinglePreviousSnapshot,
+  coerceLadderPrevious,
   priceChanged,
   extractSinglePrice,
   extractViaApi,
