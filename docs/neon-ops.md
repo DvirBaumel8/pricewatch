@@ -138,3 +138,11 @@ Wave 1 CI does **not** require a live Neon connection. Tests that run in CI
 
 If DB-dependent integration tests are added later, use GitHub Actions secrets
 to inject `DATABASE_URL` for a dedicated Neon branch, or mock the connection.
+
+## 10. Daily cron ↔ Neon watches
+
+Hosted B2B daily enqueue reads `watch_targets` / `daily_ledger` on Neon
+(not `data/customers.json`). See
+**How cron finds Neon watches** in `docs/cron-pilot.md` for the GHA
+pipeline, claim rules, and migration notes. Never put connection
+strings in chat or git.
