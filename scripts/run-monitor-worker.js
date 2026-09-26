@@ -144,8 +144,27 @@ async function processNeonEntry(entry) {
   }
 }
 
+async function retryFailedEntries() {
+  const ledger = require("../src/neon-ledger");
+  const day = ledger.jerusalemDate();
+  const all = await ledger.listByDay(day);
+  const failed = all.filter((e) => e.status === "failed");
+  let retried = 0;
+  for (const entry of failed) {
+    const res = await ledger.retry(entry.id);
+    if (res.retried) {
+      console.log(`[C] Retried failed ledger entry ${entry.id} (retry_count=${res.entry.retry_count})`);
+      retried++;
+    }
+  }
+  return retried;
+}
+
 async function runNeonOnce() {
   const ledger = require("../src/neon-ledger");
+
+  await retryFailedEntries();
+
   const entries = await ledger.listClaimed();
   if (entries.length === 0) {
     console.log("[C] No claimed ledger entries.");

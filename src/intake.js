@@ -242,6 +242,15 @@ async function confirm(url, selected, userId, customerId, previewResult) {
   for (const plan of matched) {
     const sid = skillId(trimmed, plan.plan_key);
 
+    const baselinePlans = candidates.map((c) => ({
+      plan: c.name,
+      plan_key: c.plan_key,
+      price: c.price,
+      currency: c.currency,
+      billing: c.period,
+      selected: selectedKeys.has(c.plan_key),
+    }));
+
     const skillPath = saveSkill({
       url: trimmed,
       target: plan.plan_key,
@@ -254,16 +263,9 @@ async function confirm(url, selected, userId, customerId, previewResult) {
       price: plan.price,
       currency: plan.currency,
       period: plan.period,
+      baseline: baselinePlans,
     });
 
-    const baselinePlans = candidates.map((c) => ({
-      plan: c.name,
-      plan_key: c.plan_key,
-      price: c.price,
-      currency: c.currency,
-      billing: c.period,
-      selected: selectedKeys.has(c.plan_key),
-    }));
     const snapshotPath = saveLadderSnapshot(site, baselinePlans);
 
     if (watchTargets.dbAvailable()) {

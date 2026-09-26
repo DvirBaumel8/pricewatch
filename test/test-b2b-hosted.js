@@ -120,6 +120,7 @@ function createMockDb() {
     watch_targets: [],
     customers: [],
     daily_ledger: [],
+    skills: [],
   };
 
   const pool = {
@@ -187,6 +188,17 @@ function createMockDb() {
         return { rows };
       }
 
+      if (/^UPDATE daily_ledger/i.test(sql) && /retry_count = retry_count \+ 1/i.test(sql)) {
+        const row = tables.daily_ledger.find((r) => r.id === params[0] && r.status === "failed" && r.retry_count < params[1]);
+        if (row) {
+          row.status = "claimed";
+          row.retry_count += 1;
+          row.updated_at = new Date();
+          return { rows: [row] };
+        }
+        return { rows: [] };
+      }
+
       if (/^UPDATE daily_ledger/i.test(sql)) {
         const row = tables.daily_ledger.find((r) => r.id === params[3]);
         if (row) {
@@ -214,6 +226,35 @@ function createMockDb() {
           (r) => r.customer_id === params[0]
         );
         return { rows: [{ n: rows.length }] };
+      }
+
+      if (/^INSERT INTO skills/i.test(sql)) {
+        const existing = tables.skills.find((r) => r.id === params[0]);
+        if (existing) {
+          existing.payload = typeof params[2] === "string" ? JSON.parse(params[2]) : params[2];
+          if (params[3]) existing.baseline = typeof params[3] === "string" ? JSON.parse(params[3]) : params[3];
+          existing.updated_at = new Date();
+          return { rows: [existing] };
+        }
+        const row = {
+          id: params[0],
+          site: params[1],
+          payload: typeof params[2] === "string" ? JSON.parse(params[2]) : params[2],
+          baseline: params[3] ? (typeof params[3] === "string" ? JSON.parse(params[3]) : params[3]) : null,
+          created_at: new Date(),
+          updated_at: new Date(),
+        };
+        tables.skills.push(row);
+        return { rows: [row] };
+      }
+
+      if (/^SELECT payload FROM skills WHERE id/i.test(sql)) {
+        const rows = tables.skills.filter((r) => r.id === params[0]);
+        return { rows };
+      }
+
+      if (/^SELECT payload FROM skills ORDER/i.test(sql)) {
+        return { rows: tables.skills };
       }
 
       return { rows: [] };
@@ -250,6 +291,8 @@ function clearModuleCache() {
     "../src/neon-ledger",
     "../src/watch-target-store",
     "../src/customer-store",
+    "../src/skill-store",
+    "../src/monitor-lib",
   ];
   for (const m of mods) {
     try { delete require.cache[require.resolve(m)]; } catch {}
@@ -262,6 +305,8 @@ function restoreModuleCache() {
     "../src/neon-ledger",
     "../src/watch-target-store",
     "../src/customer-store",
+    "../src/skill-store",
+    "../src/monitor-lib",
   ];
   for (const m of mods) {
     try { delete require.cache[require.resolve(m)]; } catch {}
@@ -276,14 +321,25 @@ function addMockWatchTarget(pool, opts) {
     customer_id: opts.customer_id,
     surface: opts.surface || "b2b",
     label: opts.label || "Test Target",
-    source_url: "http://127.0.0.1:3847/pricing",
-    target_description: "Pro plan — USD 10 / month",
-    plan_key: "pro",
+    source_url: opts.source_url || "http://127.0.0.1:3847/pricing",
+    target_description: opts.target_description || "Pro plan — USD 10 / month",
+    plan_key: opts.plan_key || "pro",
     skill_id: opts.skill_id || null,
     status: opts.status || "skill_ready",
     failure_count: 0,
     created_at: new Date().toISOString(),
     updated_at: new Date().toISOString(),
+  });
+}
+
+function addMockSkill(pool, skill) {
+  pool._tables.skills.push({
+    id: skill.id,
+    site: skill.site || null,
+    payload: skill,
+    baseline: null,
+    created_at: new Date(),
+    updated_at: new Date(),
   });
 }
 
@@ -659,6 +715,294 @@ async function main() {
       }
       restoreModuleCache();
     }
+  });
+
+  // ── Phase B shame (a): empty skills dir + Neon skill → load OK ─
+  console.log("\n--- Phase B shame (a): empty skills dir + Neon skill → load OK ---\n");
+
+  await testAsync("SHAME-B (a): loadSkillById falls back to Neon when file missing", async () => {
+    const mockPool = createMockDb();
+    const testSkill = {
+      id: "neon-only-skill-abc12345",
+      version: 1,
+      pricing_url: "https://example.com/pricing",
+      target_price_description: "Pro plan",
+      site: "example.com",
+      plan_name: "Pro",
+      plan_key: "pro",
+      method: "dom",
+      extract_mode: "single",
+      regex: "\\$(\\d+)/mo",
+      currency: "USD",
+      period: "month",
+      failure_count: 0,
+      skill_status: "healthy",
+    };
+    addMockSkill(mockPool, testSkill);
+    injectMockDb(mockPool);
+
+    const SKILLS_DIR = path.join(PROJECT_ROOT, "data", "skills");
+    const ghostFile = path.join(SKILLS_DIR, "neon-only-skill-abc12345.json");
+    assert(!fs.existsSync(ghostFile), "skill file must NOT exist on disk for this test");
+
+    const { loadSkillById } = require("../src/skill-store");
+    const loaded = await loadSkillById("neon-only-skill-abc12345");
+
+    assert(loaded !== null, "loadSkillById must return skill from Neon when file is missing");
+    assert(loaded.id === "neon-only-skill-abc12345", "loaded skill id must match");
+    assert(loaded.pricing_url === "https://example.com/pricing", "pricing_url must match");
+    assert(loaded.method === "dom", "method must match");
+
+    restoreModuleCache();
+  });
+
+  await testAsync("SHAME-B (a): monitor-lib runMonitorCheck loads from Neon when skill file absent", async () => {
+    const mockPool = createMockDb();
+    const testSkill = {
+      id: "neon-hosted-skill-99887766",
+      version: 1,
+      pricing_url: "https://example.com/pricing",
+      target_price_description: "Pro plan",
+      site: "example.com",
+      plan_name: "Pro",
+      plan_key: "pro",
+      method: "api",
+      extract_mode: "single",
+      currency: "USD",
+      period: "month",
+      failure_count: 0,
+      skill_status: "healthy",
+    };
+    addMockSkill(mockPool, testSkill);
+    injectMockDb(mockPool);
+
+    const SKILLS_DIR = path.join(PROJECT_ROOT, "data", "skills");
+    const ghostFile = path.join(SKILLS_DIR, "neon-hosted-skill-99887766.json");
+    assert(!fs.existsSync(ghostFile), "skill file must NOT exist on disk for this test");
+
+    const { loadSkillWithNeon } = require("../src/monitor-lib");
+    const loaded = await loadSkillWithNeon("neon-hosted-skill-99887766");
+
+    assert(loaded !== null, "loadSkillWithNeon must return skill from Neon");
+    assert(loaded.id === "neon-hosted-skill-99887766", "skill id must match");
+
+    restoreModuleCache();
+  });
+
+  // ── Phase B shame (b): change fixture → customer price_change (NOT ops-alert) ──
+  console.log("\n--- Phase B shame (b): change fixture → customer price_change (NOT ops-alert) ---\n");
+
+  test("SHAME-B (b): price change outbox email is type price_change, not ops_alert", () => {
+    cleanOutbox();
+    removeKillFile();
+
+    writeOutboxEmail("price-change_shame-b-customer.json", {
+      type: "price_change",
+      skill_id: "shame-b-skill",
+      customer_id: "cust-shame-b",
+      customer_email: "pilot@team.dev",
+      base_url: "https://example.com/pricing",
+      target: "Pro plan",
+      timestamp: new Date().toISOString(),
+      before: { amount: 10, currency: "USD", period: "month", display: "$10/mo" },
+      after: { amount: 15, currency: "USD", period: "month", display: "$15/mo" },
+      subject: "PriceWatch: example.com changed",
+      body: "We detected a price change for Pro plan.\n\n  Before: $10/mo\n  After:  $15/mo\n\n— PriceWatch",
+    });
+
+    const files = outboxJsonFiles();
+    assert(files.length === 1, `expected 1 outbox file, got ${files.length}`);
+
+    const emailData = JSON.parse(
+      fs.readFileSync(path.join(OUTBOX_DIR, files[0]), "utf8")
+    );
+    assert(emailData.type === "price_change", `email type must be 'price_change', got '${emailData.type}'`);
+    assert(emailData.type !== "ops_alert", "email type must NOT be ops_alert for customer price changes");
+    assert(emailData.customer_email === "pilot@team.dev", "customer_email must be set");
+    assert(emailData.before.amount === 10, "before amount must be 10");
+    assert(emailData.after.amount === 15, "after amount must be 15");
+
+    const result = runMailer({
+      PRICEWATCH_M1B_UNLOCK: "",
+      PRICEWATCH_MAIL_ALLOWLIST: "pilot@team.dev",
+      PRICEWATCH_TEST_EMAIL: "",
+      PRICEWATCH_OPS_EMAIL: "",
+      PRICEWATCH_KILL: "",
+    });
+
+    assert(
+      !(result.stdout || "").includes("BLOCKED"),
+      "allowlisted customer price_change email must NOT be blocked"
+    );
+
+    cleanOutbox();
+  });
+
+  // ── Phase B shame (c): lab localhost → blocked/skipped ──────────
+  console.log("\n--- Phase B shame (c): lab localhost → blocked/skipped ---\n");
+
+  test("SHAME-B (c): enqueue-daily-ticks blocks localhost source_url with clear reason", () => {
+    const src = fs.readFileSync(
+      path.join(PROJECT_ROOT, "scripts", "enqueue-daily-ticks.js"),
+      "utf8"
+    );
+    assert(src.includes("isLabHost"), "enqueue script must have isLabHost check");
+    assert(
+      src.includes("lab-blocked") || src.includes("localhost"),
+      "enqueue script must log a clear reason when blocking localhost"
+    );
+  });
+
+  await testAsync("SHAME-B (c): localhost watch target skipped in Neon enqueue path", async () => {
+    const mockPool = createMockDb();
+    addMockCustomer(mockPool, { id: "cust-lab", name: "Lab User", email: "lab@test.com" });
+    addMockWatchTarget(mockPool, {
+      id: "wt-lab-local",
+      customer_id: "cust-lab",
+      skill_id: "127-0-0-1-b2300ebc",
+      label: "Lab localhost skill",
+      source_url: "http://127.0.0.1:3847/pricing",
+      status: "skill_ready",
+    });
+    addMockWatchTarget(mockPool, {
+      id: "wt-real-site",
+      customer_id: "cust-lab",
+      skill_id: "vercel-com-8bd87c12",
+      label: "Vercel Pro",
+      source_url: "https://vercel.com/pricing",
+      status: "skill_ready",
+    });
+
+    injectMockDb(mockPool);
+    const ledger = require("../src/neon-ledger");
+
+    const localhostWt = mockPool._tables.watch_targets.find((r) => r.id === "wt-lab-local");
+    assert(localhostWt, "mock must have localhost watch target");
+    assert(/^https?:\/\/(127\.0\.0\.1|localhost)/.test(localhostWt.source_url),
+      "localhost wt must have localhost source_url");
+
+    const realWt = mockPool._tables.watch_targets.find((r) => r.id === "wt-real-site");
+    assert(realWt, "mock must have real-site watch target");
+    assert(!/^https?:\/\/(127\.0\.0\.1|localhost)/.test(realWt.source_url),
+      "real wt must NOT have localhost source_url");
+
+    const realResult = await ledger.claim({
+      watchTargetId: "wt-real-site",
+      customerId: "cust-lab",
+      skillId: "vercel-com-8bd87c12",
+    });
+    assert(realResult.created === true, "real-site claim should succeed");
+
+    const ledgerEntries = await ledger.listByDay();
+    const localEntries = ledgerEntries.filter((e) => e.watch_target_id === "wt-lab-local");
+    assert(localEntries.length === 0, "localhost watch target must NOT have ledger entry");
+
+    restoreModuleCache();
+  });
+
+  // ── Phase B shame (d): kill stops send ──────────────────────────
+  console.log("\n--- Phase B shame (d): kill stops send ---\n");
+
+  test("SHAME-B (d): kill switch via env prevents outbox drain", () => {
+    cleanOutbox();
+
+    writeOutboxEmail("price-change_shame-d-kill.json", {
+      type: "price_change",
+      customer_email: "pilot@team.dev",
+      subject: "PriceWatch: kill test Phase B",
+      body: "Kill test body Phase B",
+    });
+
+    const result = runMailer({
+      PRICEWATCH_KILL: "1",
+      PRICEWATCH_M1B_UNLOCK: "",
+      PRICEWATCH_MAIL_ALLOWLIST: "pilot@team.dev",
+      PRICEWATCH_TEST_EMAIL: "",
+      PRICEWATCH_OPS_EMAIL: "",
+    });
+
+    assert(result.code === 0, `expected exit 0, got ${result.code}`);
+    assert(
+      (result.stdout || "").includes("Kill switch"),
+      "must log kill switch message"
+    );
+    assert(
+      !sentMarkerExists("price-change_shame-d-kill.json"),
+      "must NOT create .sent marker while killed"
+    );
+
+    cleanOutbox();
+  });
+
+  // ── Phase B shame (e): failed ledger retryable same-day ─────────
+  console.log("\n--- Phase B shame (e): failed ledger retryable same-day ---\n");
+
+  await testAsync("SHAME-B (e): failed ledger entry can be retried same day", async () => {
+    const mockPool = createMockDb();
+    addMockWatchTarget(mockPool, {
+      id: "wt-retry",
+      customer_id: "cust-retry",
+      skill_id: "skill-retry",
+      status: "skill_ready",
+    });
+
+    injectMockDb(mockPool);
+    const ledger = require("../src/neon-ledger");
+
+    const claimRes = await ledger.claim({
+      watchTargetId: "wt-retry",
+      customerId: "cust-retry",
+      skillId: "skill-retry",
+    });
+    assert(claimRes.created === true, "initial claim should succeed");
+
+    await ledger.complete(claimRes.entry.id, {
+      status: "failed",
+      result: "fetch_fail",
+      reason: "HTTP 503",
+    });
+
+    const day = ledger.jerusalemDate();
+    const beforeRetry = await ledger.listByDay(day);
+    const failedEntry = beforeRetry.find((e) => e.id === claimRes.entry.id);
+    assert(failedEntry.status === "failed", "entry must be failed before retry");
+
+    const retryRes = await ledger.retry(claimRes.entry.id);
+    assert(retryRes.retried === true, "retry must succeed for failed entry");
+    assert(retryRes.entry.status === "claimed", "retried entry must be back to claimed");
+    assert(retryRes.entry.retry_count === 1, `retry_count must be 1, got ${retryRes.entry.retry_count}`);
+
+    const afterRetry = await ledger.listClaimed(day);
+    const retriedEntry = afterRetry.find((e) => e.id === claimRes.entry.id);
+    assert(retriedEntry, "retried entry must appear in listClaimed");
+
+    restoreModuleCache();
+  });
+
+  // ── Phase B structural: migration + skill-store ──────────────
+  console.log("\n--- Phase B structural checks ---\n");
+
+  test("migration 6_skills.js exports up and down", () => {
+    const migration = require("../migrations/6_skills.js");
+    assert(typeof migration.up === "function", "up must be a function");
+    assert(typeof migration.down === "function", "down must be a function");
+  });
+
+  test("skill-store exports loadSkillById and neonSaveSkill", () => {
+    restoreModuleCache();
+    const store = require("../src/skill-store");
+    assert(typeof store.loadSkillById === "function", "loadSkillById must be exported");
+    assert(typeof store.neonSaveSkill === "function", "neonSaveSkill must be exported");
+    assert(typeof store.listSkillsWithNeon === "function", "listSkillsWithNeon must be exported");
+    assert(typeof store.dbAvailable === "function", "dbAvailable must be exported");
+    restoreModuleCache();
+  });
+
+  test("monitor-lib exports loadSkillWithNeon", () => {
+    restoreModuleCache();
+    const lib = require("../src/monitor-lib");
+    assert(typeof lib.loadSkillWithNeon === "function", "loadSkillWithNeon must be exported");
+    restoreModuleCache();
   });
 
   // ── Structural checks ────────────────────────────────────────

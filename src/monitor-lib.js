@@ -280,6 +280,16 @@ function loadSkill(skillId) {
   return JSON.parse(fs.readFileSync(skillPath, "utf8"));
 }
 
+/**
+ * Load skill with Neon fallback — for hosted mode where data/skills/ may be empty.
+ */
+async function loadSkillWithNeon(skillId) {
+  const fromFile = loadSkill(skillId);
+  if (fromFile) return fromFile;
+  const { loadSkillById } = require("./skill-store");
+  return loadSkillById(skillId);
+}
+
 function loadSkillByPath(skillPath) {
   const fullPath = path.resolve(__dirname, "..", skillPath);
   if (!fs.existsSync(fullPath)) return null;
@@ -569,6 +579,9 @@ async function runMonitorCheck(skillId, opts = {}) {
     raw = loadSkillByPath(opts.skillPath);
   }
   if (!raw) {
+    raw = await loadSkillWithNeon(skillId);
+  }
+  if (!raw) {
     const error = `Skill not found: ${skillId}`;
     const opsAlertPath = writeOpsAlert(skillId, error, customerInfo);
     return { status: "error", error, opsAlertPath, wallMs: Date.now() - t0 };
@@ -714,6 +727,7 @@ module.exports = {
   runPlansMonitorCheck,
   loadSkill,
   loadSkillByPath,
+  loadSkillWithNeon,
   writePriceChangeEmail,
   writeOpsAlert,
   loadLatestSnapshot,
