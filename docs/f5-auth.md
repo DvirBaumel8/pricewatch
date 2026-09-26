@@ -15,7 +15,7 @@ and requires a real token-consume flow when they differ.
 | `DATABASE_URL` | Yes (prod) | Neon Postgres connection string |
 | `GOOGLE_CLIENT_ID` | Yes (prod) | GCP OAuth 2.0 client ID |
 | `GOOGLE_CLIENT_SECRET` | Yes (prod) | GCP OAuth 2.0 client secret — **NEVER commit** |
-| `GOOGLE_REDIRECT_URI` | No | OAuth redirect URI (default: `postmessage`) |
+| `GOOGLE_REDIRECT_URI` | Yes (hosted) | OAuth redirect URI registered in GCP + set on Render |
 | `JWT_SECRET` | Yes (prod) | HMAC-SHA256 key for signing JWTs — **NEVER commit** |
 | `AUTH_STUB` | No | Set to `1` for local/CI test mode (no real Google) |
 
@@ -27,6 +27,51 @@ In Render (or any host), set these as environment secrets:
 - `GOOGLE_CLIENT_ID` — from GCP Console → APIs & Services → Credentials
 - `GOOGLE_CLIENT_SECRET` — same page
 - `JWT_SECRET` — generate with `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"`
+
+
+
+## Hosted Google login on Render (Wave 6)
+
+**AUTH_STUB must stay unset / off on production Render.** Stub mode is for
+local + `npm test` only. Hosted login is real Google OAuth.
+
+### Env names (Render → Environment)
+
+Set these as secrets / env vars on Service A (names only — never commit values):
+
+| Name | Notes |
+|---|---|
+| `GOOGLE_CLIENT_ID` | GCP OAuth 2.0 Web client ID |
+| `GOOGLE_CLIENT_SECRET` | Matching client secret |
+| `GOOGLE_REDIRECT_URI` | Must match an authorized redirect URI in GCP exactly |
+| `JWT_SECRET` | HMAC key for session JWTs |
+| `DATABASE_URL` | Neon connection string |
+
+Do **not** set `AUTH_STUB=1` on Render. Health should report `"auth_mode": "google"`.
+
+### GCP + Render redirect URI steps
+
+1. In [Google Cloud Console](https://console.cloud.google.com/) → APIs & Services → Credentials → create (or open) an **OAuth 2.0 Client ID** of type **Web application**.
+2. Under **Authorized redirect URIs**, add the Render callback your client uses, for example:
+   - `https://<your-service-a>.onrender.com/auth/google/callback` (if you host a thin redirect page), **or**
+   - the exact URI your OAuth client posts the `code` back to before calling `POST /auth/login`.
+3. Copy Client ID + Client Secret into Render env as `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET`.
+4. Set `GOOGLE_REDIRECT_URI` on Render to the **same** URI string registered in GCP (mismatch → Google rejects the code exchange).
+5. Set `JWT_SECRET` (32+ random bytes hex). Restart / redeploy Service A.
+6. Smoke: `GET /health` → `auth_mode: "google"`. Then complete Google consent → obtain `code` → `POST /auth/login` with `{ "code": "..." }` → JWT for intake routes.
+
+### Fail-closed login errors
+
+`POST /auth/login` in real mode without `{ code }` returns **400** structured JSON:
+
+```json
+{
+  "error": "google_code_required",
+  "message": "Google authorization code is required. Pass { code } from the Google OAuth redirect."
+}
+```
+
+Not an opaque 500. Stub credentials without `google_subject`/`email` similarly return `stub_credentials_required` (stub / tests only).
 
 ## Stub vs Real OAuth
 

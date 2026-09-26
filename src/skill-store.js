@@ -76,7 +76,12 @@ function buildSkillPayload(data) {
   return skill;
 }
 
-function saveSkill(data) {
+/**
+ * Write skill to file always; when Neon pool exists, await Neon upsert
+ * (payload + optional baseline) BEFORE returning so hosted intake
+ * cannot race GHA loadSkillById / loadBaseline.
+ */
+async function saveSkill(data) {
   fs.mkdirSync(SKILLS_DIR, { recursive: true });
   const fname = skillFilename(data.url || `https://${data.site}`, data.target || "");
   const fpath = path.join(SKILLS_DIR, fname);
@@ -86,22 +91,56 @@ function saveSkill(data) {
   fs.writeFileSync(fpath, JSON.stringify(skill, null, 2) + "\n");
 
   if (dbAvailable()) {
-    const site = skill.site || null;
-    const baseline = data.baseline || null;
-    query(
-      `INSERT INTO skills (id, site, payload, baseline)
-       VALUES ($1, $2, $3, $4)
-       ON CONFLICT (id) DO UPDATE SET
-         payload = EXCLUDED.payload,
-         baseline = COALESCE(EXCLUDED.baseline, skills.baseline),
-         updated_at = now()`,
-      [skill.id, site, JSON.stringify(skill), baseline ? JSON.stringify(baseline) : null]
-    ).catch((err) => {
-      console.error(`[skill-store] Neon write failed for ${skill.id}: ${err.message}`);
-    });
+    await neonSaveSkill(skill, data.baseline || null);
   }
 
   return path.relative(path.join(__dirname, ".."), fpath);
+}
+
+/**
+ * Resolve skill by id: Neon / exact filename first, then scan data/skills/*.json
+ * (committed skills are often named by host, e.g. linear-app.json, not by id).
+ */
+async function resolveSkillById(id) {
+  if (!id) return null;
+  const direct = await loadSkillById(id);
+  if (direct) return direct;
+  const fromFiles = listSkills().find((s) => s && s.id === id);
+  return fromFiles || null;
+}
+
+/** Single-price baseline shape expected by monitor-lib coerceSinglePreviousSnapshot. */
+function baselineFromSkill(skill) {
+  if (!skill || skill.price == null) return null;
+  return {
+    price: {
+      amount: skill.price,
+      currency: skill.currency || "USD",
+      period: skill.period || "month",
+    },
+    skill_id: skill.id,
+    checked_at: new Date().toISOString(),
+  };
+}
+
+/**
+ * Ensure Neon has skill payload + baseline for a known skill id (catalog / host path).
+ * No-op when DB unavailable. Returns true when Neon row written/updated.
+ */
+async function ensureSkillAndBaselineInNeon(skillId) {
+  if (!dbAvailable() || !skillId) return false;
+  const skill = await resolveSkillById(skillId);
+  if (!skill) {
+    console.error(`[skill-store] ensureSkillAndBaselineInNeon: skill ${skillId} not found locally or in Neon`);
+    return false;
+  }
+  let baseline = null;
+  try {
+    baseline = await loadBaseline(skillId);
+  } catch { /* first write */ }
+  if (!baseline) baseline = baselineFromSkill(skill);
+  await neonSaveSkill(skill, baseline);
+  return true;
 }
 
 /**
@@ -253,6 +292,10 @@ module.exports = {
   saveBaseline,
   listSkills,
   listSkillsWithNeon,
+  resolveSkillById,
+  baselineFromSkill,
+  ensureSkillAndBaselineInNeon,
+  buildSkillPayload,
   skillId,
   dbAvailable,
   SKILLS_DIR,

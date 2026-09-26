@@ -267,7 +267,7 @@ async function runRealSiteDiscovery(url, target) {
         result.llmTokens = out.llmTokens || 0;
         result.wallMs = Date.now() - t0;
 
-        const skillPath = saveSkill({
+        const skillPath = await saveSkill({
           url,
           target,
           method: step.name === "http-dom" ? "dom" : out.method || step.name,
