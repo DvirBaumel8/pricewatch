@@ -59,21 +59,41 @@ Override API target from the browser with `?api=http://127.0.0.1:3850` (direct; 
 - Not product accept / production-ready
 - Not live Google unlock (Wave 6 Phase B stays parked)
 
-## Static serve path (Boris)
+## Hosted on Service A (Wave 8)
+
+Public URL on the existing free Service A (no new paid service):
+
+```
+https://pricewatch-9cja.onrender.com/fe-b2b/
+```
+
+Service A serves `public/fe-b2b/` at `/fe-b2b/` (and `/fe-b2b/index.html`). Trailing slash OK. Existing API routes (`/health`, `/auth`, `/b2b`, `/customers`, …) are unchanged.
+
+**Same-origin happy path:** open the hosted URL — the FE calls `/health`, `/auth`, `/b2b`, `/customers` on the **same host**. No `?api=` required. Live Google OAuth remains PARKED; do **not** set `AUTH_STUB=1` on Render.
+
+## Static serve path
 
 | Path | Role |
 |---|---|
 | `public/fe-b2b/` | Static HTML/JS for the thin B2B UI |
-| `scripts/fe-b2b-server.js` | Local static server + reverse-proxy to Service A |
-| `npm run fe-b2b` | Starts the FE shell |
+| Service A `GET /fe-b2b/` | Hosted static serve (Wave 8) |
+| `scripts/fe-b2b-server.js` | Local-only static server + reverse-proxy to Service A |
+| `npm run fe-b2b` | Starts the local FE shell |
 
-**No new paid Render service.** Optional later: serve the same static folder from existing Service A or a free static path — out of scope unless Render bind changes are requested.
+**No new paid Render service.** Local `npm run fe-b2b` remains for offline/shame; production/pilot watch path is Service A `/fe-b2b/`.
 
 ## Shame / CI
 
-`test/test-fe-b2b.js` is wired into `npm test`:
+`test/test-fe-b2b.js` (Wave 7) and `test/test-host-fe-b2b.js` (Wave 8) are wired into `npm test`:
 
+Wave 7 FE:
 - (a) missing auth → clear error
 - (b) preview → confirm happy path (stub + lab fixture)
 - (c) Wave 4/5/6 API shame still in `npm test`
 - (d) no secrets in git
+
+Wave 8 host:
+- (a) Service A static `/fe-b2b/` serves index
+- (b) `/health` reachable same-origin alongside static
+- (c) prior FE + hosted shame still green
+- (d) secrets CLEAN
