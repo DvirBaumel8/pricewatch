@@ -377,12 +377,58 @@ function writePriceChangeEmail(skill, before, after, customerInfo) {
     changeLine = `We detected a price change for ${target} on ${name}.`;
   }
 
+  const surface = customerInfo && customerInfo.surface ? customerInfo.surface : null;
+  const isB2c = surface === "b2c";
+  // B2C-only affiliate CTA + disclosure (never pollute B2B competitor emails).
+  const affiliateClickUrl =
+    isB2c && customerInfo && customerInfo.affiliateClickUrl
+      ? customerInfo.affiliateClickUrl
+      : null;
+  const disclosureSnippet =
+    isB2c && customerInfo && customerInfo.disclosureSnippet
+      ? customerInfo.disclosureSnippet
+      : null;
+  const productOfferId =
+    isB2c && customerInfo && customerInfo.productOfferId
+      ? customerInfo.productOfferId
+      : null;
+
+  const bodyLines = [
+    `Hi${customerInfo && customerInfo.customerName ? ` ${customerInfo.customerName}` : ""},`,
+    "",
+    changeLine,
+    "",
+    `  Before: ${formatDisplay(before)}`,
+    `  After:  ${formatDisplay(after)}`,
+    "",
+  ];
+
+  if (affiliateClickUrl) {
+    bodyLines.push(`Buy / see deal: ${affiliateClickUrl}`);
+    if (disclosureSnippet) {
+      bodyLines.push(disclosureSnippet);
+    }
+    bodyLines.push("");
+  } else {
+    bodyLines.push(friendlyPricingLink(skill));
+    bodyLines.push("");
+  }
+
+  bodyLines.push(
+    `Detected ${formatJerusalemTime(now)}.`,
+    "",
+    "Questions? Reply to this email or write price.watcher.service@gmail.com.",
+    "",
+    "— PriceWatch"
+  );
+
   const email = {
     type: "price_change",
     skill_id: skill.id,
     customer_id: customerInfo ? customerInfo.customerId : null,
     customer_email: customerInfo ? customerInfo.customerEmail : null,
     customer_name: customerInfo ? customerInfo.customerName : null,
+    surface: surface || null,
     base_url: skill.base_url || skill.pricing_url,
     target,
     timestamp: now.toISOString(),
@@ -399,23 +445,15 @@ function writePriceChangeEmail(skill, before, after, customerInfo) {
       display: formatDisplay(after),
     },
     subject: `PriceWatch: ${name} changed`,
-    body: [
-      `Hi${customerInfo && customerInfo.customerName ? ` ${customerInfo.customerName}` : ""},`,
-      "",
-      changeLine,
-      "",
-      `  Before: ${formatDisplay(before)}`,
-      `  After:  ${formatDisplay(after)}`,
-      "",
-      friendlyPricingLink(skill),
-      "",
-      `Detected ${formatJerusalemTime(now)}.`,
-      "",
-      "Questions? Reply to this email or write price.watcher.service@gmail.com.",
-      "",
-      "— PriceWatch",
-    ].join("\n"),
+    body: bodyLines.join("\n"),
   };
+
+  if (isB2c && affiliateClickUrl) {
+    email.product_offer_id = productOfferId;
+    email.affiliate_click_url = affiliateClickUrl;
+    email.disclosure_snippet = disclosureSnippet;
+    email.disclosure_flag = true;
+  }
 
   fs.writeFileSync(emailPath, JSON.stringify(email, null, 2) + "\n");
   return emailPath;

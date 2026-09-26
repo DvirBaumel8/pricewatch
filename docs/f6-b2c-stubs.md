@@ -1,6 +1,6 @@
 # F6 — B2C stubs (CB-15…18)
 
-**Status:** Implemented (fields/API only — no live Stripe, no FE, no catalog intelligence)
+**Status:** Implemented (fields/API + Wave 5 hosted e2e: Neon seed, B2C slots, allowlisted change email with `/r/:id` CTA + disclosure). No live Stripe, no FE, no catalog intelligence.
 
 ## Schema
 
@@ -12,7 +12,7 @@
 | merchant_url | text NOT NULL | Product/pricing page URL |
 | affiliate_url | text | Affiliate redirect target (nullable) |
 | affiliate_program_id | text | Partner program identifier (nullable) |
-| disclosure | text NOT NULL | Affiliate disclosure text |
+| disclosure | text NOT NULL | Affiliate disclosure text (disclosure_flag derived when non-empty) |
 | skill_id | text | Optional — links to existing skill |
 | active | boolean NOT NULL | Default true |
 | label | text NOT NULL | Human-readable offer name |
@@ -125,14 +125,14 @@ curl http://localhost:3850/b2c/slots -H "Authorization: Bearer $TOKEN"
 
 ```bash
 # Redirect (follows Location header)
-curl -v http://localhost:3850/r/offer-plausible-growth
-# → 302 Location: https://aff.example.com/plausible?ref=pricewatch
+curl -v http://localhost:3850/r/offer-linear-standard
+# → 302 Location: https://aff.example.com/linear?ref=pricewatch
 ```
 
 ## Seed product offers
 
 ```bash
-# Seed 2 stub offers (Plausible + Linear)
+# Seed 2 stub offers (Linear + Vercel — honest public pricing URLs)
 curl -X POST http://localhost:3850/product-offers/seed \
   -H "Authorization: Bearer $TOKEN"
 

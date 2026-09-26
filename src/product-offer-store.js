@@ -1,18 +1,21 @@
 /**
- * ProductOffer store (F6 / CB-15).
+ * ProductOffer store (F6 / CB-15 + Wave 5 B2C catalog seed).
  *
- * Stub catalog of merchant products with affiliate redirect info.
- * Affiliate fields live here — never on B2B competitor emails.
+ * Neon-backed curated catalog — merchant URL, affiliate redirect stub,
+ * disclosure flag/copy. Affiliate fields live here — never on B2B emails.
  *
- * Fields: merchant_url, affiliate_url (or affiliate_program_id),
- *   disclosure, skill_id (optional), active flag, label.
- *
- * Token budget: 0 LLM.
+ * Seed uses real public product/pricing URLs (reachable / honest).
+ * Affiliate destinations may be stubs (aff.example.com) until a network
+ * is contracted. Token budget: 0 LLM.
  */
 'use strict';
 
 const crypto = require('crypto');
 const { query, getPool } = require('./db');
+
+/** One-line commission disclosure used when offer.disclosure is empty. */
+const DEFAULT_DISCLOSURE =
+  'We may earn a commission if you buy via this link.';
 
 function dbAvailable() {
   return !!getPool();
@@ -30,6 +33,8 @@ function rowToOffer(row) {
     affiliate_url: row.affiliate_url,
     affiliate_program_id: row.affiliate_program_id,
     disclosure: row.disclosure,
+    /** Explicit disclosure flag — true when disclosure copy is present. */
+    disclosure_flag: !!(row.disclosure && String(row.disclosure).trim()),
     skill_id: row.skill_id,
     active: row.active,
     label: row.label,
@@ -38,35 +43,64 @@ function rowToOffer(row) {
   };
 }
 
+/**
+ * Seed catalog — honest public URLs only (verified reachable at Wave 5 write).
+ * Israel-relevant retail (Tami-4 / KSP class) was not stably reachable from
+ * the host at seed time; Linear + Vercel pricing pages are public + skill-backed.
+ * Affiliate destinations remain stubs until a real network is chosen.
+ */
 const SEED_OFFERS = Object.freeze([
-  {
-    id: 'offer-plausible-growth',
-    merchant_url: 'https://plausible.io/pricing',
-    affiliate_url: 'https://aff.example.com/plausible?ref=pricewatch',
-    affiliate_program_id: 'plausible-aff-001',
-    disclosure: 'PriceWatch earns a commission if you subscribe via this link.',
-    skill_id: 'plausible-io',
-    active: true,
-    label: 'Plausible Analytics — Growth',
-  },
   {
     id: 'offer-linear-standard',
     merchant_url: 'https://linear.app/pricing',
-    affiliate_url: null,
+    affiliate_url: 'https://aff.example.com/linear?ref=pricewatch',
     affiliate_program_id: 'linear-partner-002',
-    disclosure: 'PriceWatch may receive referral credit for sign-ups via this link.',
-    skill_id: 'linear-app',
+    disclosure: DEFAULT_DISCLOSURE,
+    skill_id: 'linear-app-ee93dab8',
     active: true,
-    label: 'Linear — Standard',
+    label: 'Linear — Basic',
+  },
+  {
+    id: 'offer-vercel-pro',
+    merchant_url: 'https://vercel.com/pricing',
+    affiliate_url: 'https://aff.example.com/vercel?ref=pricewatch',
+    affiliate_program_id: 'vercel-aff-001',
+    disclosure: DEFAULT_DISCLOSURE,
+    skill_id: 'vercel-com-8bd87c12',
+    active: true,
+    label: 'Vercel — Pro',
   },
 ]);
+
+/** Tracked click path for email CTA / FE — Service A GET /r/:id. */
+function trackedClickPath(offerId) {
+  if (!offerId) return null;
+  return `/r/${offerId}`;
+}
+
+/**
+ * Resolve affiliate fields for a B2C price_change email.
+ * Prefer /r/:id tracked path (logs click then 302s to affiliate_url or merchant).
+ */
+function affiliateFieldsForEmail(offer) {
+  if (!offer || !offer.id) return null;
+  const disclosure =
+    (offer.disclosure && String(offer.disclosure).trim()) || DEFAULT_DISCLOSURE;
+  return {
+    product_offer_id: offer.id,
+    affiliate_click_url: trackedClickPath(offer.id),
+    disclosure_snippet: disclosure,
+    disclosure_flag: true,
+  };
+}
 
 async function create(opts) {
   if (!dbAvailable()) {
     throw new Error('No database pool — cannot create ProductOffer without Neon');
   }
   if (!opts.merchant_url) throw new Error('merchant_url is required');
-  if (!opts.disclosure) throw new Error('disclosure is required');
+  const disclosure = opts.disclosure || DEFAULT_DISCLOSURE;
+  if (!disclosure) throw new Error('disclosure is required');
   if (!opts.label) throw new Error('label is required');
 
   const id = opts.id || generateId();
@@ -90,7 +124,7 @@ async function create(opts) {
       opts.merchant_url,
       opts.affiliate_url || null,
       opts.affiliate_program_id || null,
-      opts.disclosure,
+      disclosure,
       opts.skill_id || null,
       opts.active !== false,
       opts.label,
@@ -154,7 +188,10 @@ async function getClickCount(offerId) {
 module.exports = {
   dbAvailable,
   generateId,
+  DEFAULT_DISCLOSURE,
   SEED_OFFERS,
+  trackedClickPath,
+  affiliateFieldsForEmail,
   create,
   getById,
   listActive,

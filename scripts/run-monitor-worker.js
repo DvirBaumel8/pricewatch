@@ -77,7 +77,24 @@ async function processNeonEntry(entry) {
     customerId: entry.customer_id,
     customerEmail: customer ? customer.email : null,
     customerName: customer ? customer.name : null,
+    surface: wt.surface || null,
   };
+
+  // Wave 5 B2C: attach affiliate CTA stub + disclosure from ProductOffer.
+  if (wt.surface === "b2c" && wt.product_offer_id) {
+    try {
+      const productOffers = require("../src/product-offer-store");
+      const offer = await productOffers.getById(wt.product_offer_id);
+      const fields = productOffers.affiliateFieldsForEmail(offer);
+      if (fields) {
+        customerInfo.productOfferId = fields.product_offer_id;
+        customerInfo.affiliateClickUrl = fields.affiliate_click_url;
+        customerInfo.disclosureSnippet = fields.disclosure_snippet;
+      }
+    } catch (e) {
+      console.error(`  [C] ProductOffer lookup failed for ${wt.product_offer_id}: ${e.message}`);
+    }
+  }
 
   const skillId = entry.skill_id || wt.skill_id;
   if (!skillId) {

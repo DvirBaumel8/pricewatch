@@ -1,9 +1,11 @@
 /**
- * Neon-backed WatchTarget store (F2).
+ * Neon-backed WatchTarget store (F2 + Wave 5 product_offer_id).
  *
  * Canonical unit of watch for B2B and B2C (surface: b2b | b2c).
  * When a DB pool exists (DATABASE_URL / DATABASE_URL_NODE), Neon is authoritative.
  * Competitor API maps to WatchTarget with surface=b2b — see docs/watch-target.md.
+ *
+ * Wave 5: optional product_offer_id links B2C watches to catalog for affiliate CTA.
  *
  * Token budget: 0 LLM.
  */
@@ -69,6 +71,7 @@ function rowToWatchTarget(row) {
     target_description: row.target_description,
     plan_key: row.plan_key,
     skill_id: row.skill_id,
+    product_offer_id: row.product_offer_id || null,
     status: row.status,
     failure_count: row.failure_count,
     created_at: row.created_at,
@@ -103,6 +106,7 @@ function toCompetitorShape(wt) {
  * @param {string} opts.target_description
  * @param {string} [opts.plan_key]
  * @param {string} [opts.skill_id]
+ * @param {string} [opts.product_offer_id] B2C catalog link (optional)
  * @param {string} [opts.status] default pending_onboarding
  * @param {string} [opts.id] optional fixed id (competitor shim reuse)
  */
@@ -135,10 +139,10 @@ async function create(opts) {
   const res = await query(
     `INSERT INTO watch_targets (
        id, customer_id, surface, label, source_url, target_description,
-       plan_key, skill_id, status, failure_count, created_at, updated_at
+       plan_key, skill_id, product_offer_id, status, failure_count, created_at, updated_at
      ) VALUES (
        $1, $2, $3, $4, $5, $6,
-       $7, $8, $9, 0, now(), now()
+       $7, $8, $9, $10, 0, now(), now()
      )
      RETURNING *`,
     [
@@ -150,6 +154,7 @@ async function create(opts) {
       opts.target_description,
       opts.plan_key || null,
       opts.skill_id || null,
+      opts.product_offer_id || null,
       status,
     ]
   );
@@ -176,7 +181,27 @@ async function listByCustomer(customerId, { surface } = {}) {
   return res.rows.map(rowToWatchTarget);
 }
 
-async function updateStatus(id, { status, skill_id, failure_count } = {}) {
+/**
+ * List skill_ready watches for daily enqueue (B2B + B2C hosted path).
+ */
+async function listSkillReady({ surface } = {}) {
+  if (!dbAvailable()) return [];
+  let sql =
+    "SELECT * FROM watch_targets WHERE status = 'skill_ready'";
+  const params = [];
+  if (surface) {
+    assertSurface(surface);
+    sql += " AND surface = $1";
+    params.push(surface);
+  } else {
+    sql += " AND surface IN ('b2b', 'b2c')";
+  }
+  sql += " ORDER BY created_at ASC";
+  const res = await query(sql, params);
+  return res.rows.map(rowToWatchTarget);
+}
+
+async function updateStatus(id, { status, skill_id, failure_count, product_offer_id } = {}) {
   if (!dbAvailable()) {
     throw new Error("No database pool — cannot update WatchTarget without Neon");
   }
@@ -192,6 +217,10 @@ async function updateStatus(id, { status, skill_id, failure_count } = {}) {
   if (skill_id !== undefined) {
     sets.push(`skill_id = $${i++}`);
     params.push(skill_id);
+  }
+  if (product_offer_id !== undefined) {
+    sets.push(`product_offer_id = $${i++}`);
+    params.push(product_offer_id);
   }
   if (failure_count !== undefined) {
     sets.push(`failure_count = $${i++}`);
@@ -224,6 +253,7 @@ module.exports = {
   create,
   getById,
   listByCustomer,
+  listSkillReady,
   updateStatus,
   updateSkill,
   toCompetitorShape,

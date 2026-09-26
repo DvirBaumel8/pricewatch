@@ -29,6 +29,7 @@
  *   GET  /b2c/slots                         → current user slot info
  *   POST /b2c/payment-stub                  → grant package (PAYMENT_STUB)
  *   GET  /product-offers                    → list active product offers
+ *   POST /product-offers                    → create one product offer
  *   POST /product-offers/seed               → seed stub offers
  *
  * Public (no auth):
@@ -168,6 +169,9 @@ function matchRoute(method, url) {
   }
   if (method === "GET" && parts[0] === "product-offers" && parts.length === 1) {
     return { handler: "listProductOffers" };
+  }
+  if (method === "POST" && parts[0] === "product-offers" && parts.length === 1) {
+    return { handler: "createProductOffer" };
   }
   if (method === "POST" && parts[0] === "product-offers" && parts[1] === "seed" && parts.length === 2) {
     return { handler: "seedProductOffers" };
@@ -546,7 +550,34 @@ async function handleRequest(req, res) {
         return json(res, 200, offers);
       }
 
+      case "createProductOffer": {
+        const body = await readBody(req);
+        if (!body.merchant_url || !body.label) {
+          return json(res, 400, {
+            error: "merchant_url and label are required; disclosure defaults if omitted",
+          });
+        }
+        if (!productOffers.dbAvailable()) {
+          return json(res, 503, { error: "Neon required for ProductOffer create" });
+        }
+        const offer = await productOffers.create({
+          id: body.id || undefined,
+          merchant_url: body.merchant_url,
+          affiliate_url: body.affiliate_url || null,
+          affiliate_program_id: body.affiliate_program_id || null,
+          disclosure: body.disclosure || productOffers.DEFAULT_DISCLOSURE,
+          skill_id: body.skill_id || null,
+          active: body.active !== false,
+          label: body.label,
+        });
+        console.log(`[A] Created ProductOffer ${offer.id}`);
+        return json(res, 201, offer);
+      }
+
       case "seedProductOffers": {
+        if (!productOffers.dbAvailable()) {
+          return json(res, 503, { error: "Neon required for ProductOffer seed" });
+        }
         const seeded = await productOffers.seedOffers();
         return json(res, 201, { seeded: seeded.length, offers: seeded });
       }
@@ -565,15 +596,29 @@ async function handleRequest(req, res) {
  */
 async function createWatchTargetInternal(customerId, body, reqUser) {
   const surface = body.surface || "b2b";
-  const label = body.label || body.name;
-  const source_url =
+  let label = body.label || body.name;
+  let source_url =
     body.source_url != null
       ? body.source_url
       : body.pricing_url != null
         ? body.pricing_url
         : null;
-  const target_description =
+  let target_description =
     body.target_description || body.target_price_description;
+  let product_offer_id = body.product_offer_id || null;
+  let skill_id = body.skill_id || null;
+
+  // Wave 5: B2C catalog watch — fill from ProductOffer when linked.
+  if (surface === "b2c" && product_offer_id && productOffers.dbAvailable()) {
+    const offer = await productOffers.getById(product_offer_id);
+    if (!offer || !offer.active) {
+      return { status: 400, body: { error: "product_offer_id not found or inactive" } };
+    }
+    if (!label) label = offer.label;
+    if (source_url == null) source_url = offer.merchant_url;
+    if (!target_description) target_description = offer.label;
+    if (!skill_id && offer.skill_id) skill_id = offer.skill_id;
+  }
 
   if (!label) {
     return { status: 400, body: { error: "label (or name) is required" } };
@@ -663,7 +708,8 @@ async function createWatchTargetInternal(customerId, body, reqUser) {
     source_url,
     target_description,
     plan_key: body.plan_key || null,
-    skill_id: body.skill_id || null,
+    skill_id: skill_id || null,
+    product_offer_id: surface === "b2c" ? product_offer_id : null,
     status: body.status || "pending_onboarding",
   });
   if (created.error === "max_watch_targets_reached") {
@@ -757,6 +803,7 @@ if (require.main === module) {
     console.log(`  GET  /b2c/slots                       → B2C slot info`);
     console.log(`  POST /b2c/payment-stub                → payment stub (test)`);
     console.log(`  GET  /product-offers                  → list product offers`);
+    console.log(`  POST /product-offers                  → create product offer`);
     console.log(`  POST /product-offers/seed             → seed stub offers`);
     console.log(`  Auth: ${auth.isStub() ? "STUB (AUTH_STUB=1)" : "Google OAuth"}`);
     console.log(
