@@ -36,6 +36,8 @@
  *   GET  /r/:id                             → affiliate redirect (click log + 302)
  *   GET  /fe-b2b/                           → Thin FE-B2B static UI (public/fe-b2b)
  *   GET  /fe-b2b/*                          → safe static files under public/fe-b2b
+ *   GET  /fe-b2c/                           → Thin FE-B2C static UI (public/fe-b2c)
+ *   GET  /fe-b2c/*                          → safe static files under public/fe-b2c
  *
  * See docs/f5-auth.md for env vars, stub vs real OAuth, and route details.
  * See docs/f4-intake.md for intake preview/confirm details.
@@ -59,7 +61,10 @@ const HOST = process.env.SERVICE_A_HOST || "127.0.0.1";
 /** Thin FE-B2B static root (Wave 8 — hosted on Service A at /fe-b2b/). */
 const FE_B2B_ROOT = path.join(__dirname, "..", "public", "fe-b2b");
 
-const FE_B2B_MIME = {
+/** Thin FE-B2C static root (Wave 9 — hosted on Service A at /fe-b2c/). */
+const FE_B2C_ROOT = path.join(__dirname, "..", "public", "fe-b2c");
+
+const FE_STATIC_MIME = {
   ".html": "text/html; charset=utf-8",
   ".js": "application/javascript; charset=utf-8",
   ".css": "text/css; charset=utf-8",
@@ -121,7 +126,7 @@ function serveFeB2bStatic(req, res, resolved) {
     return;
   }
   const ext = path.extname(filePath).toLowerCase();
-  const type = FE_B2B_MIME[ext] || "application/octet-stream";
+  const type = FE_STATIC_MIME[ext] || "application/octet-stream";
   const body = fs.readFileSync(filePath);
   const headers = {
     "Content-Type": type,
@@ -136,6 +141,71 @@ function serveFeB2bStatic(req, res, resolved) {
   res.writeHead(200, headers);
   res.end(body);
 }
+
+/**
+ * Resolve a /fe-b2c URL to a file under public/fe-b2c (no path traversal).
+ * Returns { filePath } | { bad: true } | null (not an FE-B2C path).
+ */
+function resolveFeB2cStatic(reqUrl) {
+  const pathStr = String(reqUrl || "/").split("?")[0];
+  if (pathStr !== "/fe-b2c" && !pathStr.startsWith("/fe-b2c/")) {
+    return null;
+  }
+  let rel =
+    pathStr === "/fe-b2c" || pathStr === "/fe-b2c/"
+      ? "index.html"
+      : pathStr.slice("/fe-b2c/".length);
+  try {
+    rel = decodeURIComponent(rel);
+  } catch {
+    return { bad: true };
+  }
+  rel = rel.replace(/\0/g, "");
+  if (!rel || rel.endsWith("/")) {
+    rel = path.posix.join(rel || "", "index.html");
+  }
+  if (rel.includes("..") || path.isAbsolute(rel) || rel.startsWith("/") || rel.includes("\\")) {
+    return { bad: true };
+  }
+  const full = path.normalize(path.join(FE_B2C_ROOT, rel));
+  const rootWithSep = FE_B2C_ROOT.endsWith(path.sep)
+    ? FE_B2C_ROOT
+    : FE_B2C_ROOT + path.sep;
+  if (full !== FE_B2C_ROOT && !full.startsWith(rootWithSep)) {
+    return { bad: true };
+  }
+  return { filePath: full };
+}
+
+function serveFeB2cStatic(req, res, resolved) {
+  if (resolved.bad) {
+    res.writeHead(400, { "Content-Type": "text/plain; charset=utf-8" });
+    res.end("Bad path");
+    return;
+  }
+  const filePath = resolved.filePath;
+  if (!fs.existsSync(filePath) || !fs.statSync(filePath).isFile()) {
+    res.writeHead(404, { "Content-Type": "text/plain; charset=utf-8" });
+    res.end("Not found");
+    return;
+  }
+  const ext = path.extname(filePath).toLowerCase();
+  const type = FE_STATIC_MIME[ext] || "application/octet-stream";
+  const body = fs.readFileSync(filePath);
+  const headers = {
+    "Content-Type": type,
+    "Content-Length": body.length,
+    "Cache-Control": "no-store",
+  };
+  if (req.method === "HEAD") {
+    res.writeHead(200, headers);
+    res.end();
+    return;
+  }
+  res.writeHead(200, headers);
+  res.end(body);
+}
+
 
 function readBody(req) {
   return new Promise((resolve, reject) => {
@@ -271,11 +341,15 @@ async function ensureCustomerExists(customerId) {
 }
 
 async function handleRequest(req, res) {
-  // Wave 8: public Thin FE-B2B static at /fe-b2b/ (before API routing; no auth).
+  // Wave 8/9: public Thin FE static at /fe-b2b/ and /fe-b2c/ (before API routing; no auth).
   if (req.method === "GET" || req.method === "HEAD") {
-    const feStatic = resolveFeB2bStatic(req.url);
-    if (feStatic) {
-      return serveFeB2bStatic(req, res, feStatic);
+    const feB2b = resolveFeB2bStatic(req.url);
+    if (feB2b) {
+      return serveFeB2bStatic(req, res, feB2b);
+    }
+    const feB2c = resolveFeB2cStatic(req.url);
+    if (feB2c) {
+      return serveFeB2cStatic(req, res, feB2c);
     }
   }
 
@@ -932,6 +1006,7 @@ if (require.main === module) {
     console.log(`  GET  /jobs/:id                        → job detail`);
     console.log(`  GET  /r/:id                           → affiliate redirect (public)`);
     console.log(`  GET  /fe-b2b/                         → Thin FE-B2B static (public)`);
+    console.log(`  GET  /fe-b2c/                         → Thin FE-B2C static (public)`);
     console.log(`  GET  /b2c/slots                       → B2C slot info`);
     console.log(`  POST /b2c/payment-stub                → payment stub (test)`);
     console.log(`  GET  /product-offers                  → list product offers`);
@@ -951,4 +1026,6 @@ module.exports = {
   createWatchTargetInternal,
   resolveFeB2bStatic,
   FE_B2B_ROOT,
+  resolveFeB2cStatic,
+  FE_B2C_ROOT,
 };
