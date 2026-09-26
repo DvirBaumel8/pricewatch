@@ -2,7 +2,7 @@
 "use strict";
 
 /**
- * Wave 7 Thin FE-B2B shame-tests (0 LLM).
+ * Wave 7 + Wave 13 Demo-ready FE-B2B shame-tests (0 LLM).
  *
  * (a) missing auth → clear error (UI contract + API)
  * (b) preview→confirm happy path against stub/lab (in-memory Neon mock)
@@ -404,6 +404,11 @@ async function main() {
       /watches are not invented|not invented in the browser|Server owns allowlist/i.test(html),
       "must document server-owned watches"
     );
+    // On-screen camera path must NOT show POST/API jargon
+    assert(
+      !/>[^<]*POST\s*\/b2b\/intake\/confirm/i.test(html),
+      "must not show POST /b2b/intake/confirm jargon on camera path"
+    );
   });
 
   await test("FE HTML fail-closed for google_code_required + AUTH_STUB test-only + GIS button primary", () => {
@@ -418,6 +423,36 @@ async function main() {
       "must not pretend Google succeeded without code"
     );
     assert(/devCodeDetails|Dev only/i.test(html), "paste-code is secondary dev-only path");
+    // Wave 13: google mode hides stub + prefers hide Dev paste-code
+    assert(/authMode === ["']google["']/.test(html) || /authMode === "google"/.test(html), "google mode branch");
+    assert(/devCodeDetails.*hidden|classList\.add\(["']hidden["']\).*devCodeDetails|\$\(["']devCodeDetails["']\)\.classList\.add\(["']hidden["']\)/s.test(html), "dev code hidden on google path");
+  });
+
+  await test("Wave 13 demo-ready: shell, honesty chip, checkout stub, waiting Option B, watch card", () => {
+    const html = fs.readFileSync(FE_HTML, "utf8");
+    // S0 shell — no lab chrome on happy path
+    assert(!/B2B thin/i.test(html), "must not show B2B thin chip");
+    assert(!/Talks to Service A only/i.test(html), "must not show Service A tagline on camera path");
+    assert(/<title>PriceWatch<\/title>/.test(html), "title without (thin)");
+    assert(/Competitor pricing watches/i.test(html), "calm plain-English tagline");
+    // S3 honest checkout stub
+    assert(
+      /Demo \/ pilot checkout — not a live charge/.test(html),
+      "honesty chip exact phrase required"
+    );
+    assert(/Start pilot/i.test(html), "Start pilot CTA");
+    assert(/You're in|Pilot started/i.test(html), "checkout success copy");
+    assert(!/Stripe\.(com|js)|js\.stripe|pk_live|sk_live/i.test(html), "no Stripe integration on FE");
+    assert(!/••••|\*{4}|card number/i.test(html), "no fake card last4 UI");
+    // S4 add-watch human copy
+    assert(/Competitor name/i.test(html), "human rival name label");
+    assert(!/>\s*Customer name\s*</i.test(html), "no Customer name lab label");
+    // S5/S6 product watch card + Option B
+    assert(/Your watch|watchProduct|baselinePlans/i.test(html), "product watch card");
+    assert(/No price change/i.test(html), "Option B quiet status");
+    assert(/Last checked/i.test(html), "Option B last checked");
+    assert(/Daily.*morning Israel|morning Israel time/i.test(html), "Option B cadence");
+    assert(/resultBox|debug-details|Debug details/i.test(html), "optional collapsed debug");
   });
 
   await test("docs/fe-b2b.md documents Service A + stub test-only + GIS primary", () => {
@@ -596,7 +631,7 @@ async function main() {
       });
       assert(res.status === 200, `status=${res.status}`);
       assert(/PriceWatch/i.test(res.raw || ""), "HTML body");
-      assert(/B2B/i.test(res.raw || ""), "B2B marker");
+      assert(/Sign in with Google|Start pilot|Add watch/i.test(res.raw || ""), "demo-ready markers");
     });
 
     await test("SHAME (b): FE proxy health → auth_mode stub", async () => {

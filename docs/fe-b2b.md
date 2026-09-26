@@ -1,6 +1,6 @@
-# Thin FE-B2B — login hook + add-watch UI
+# FE-B2B — Demo-ready B2B UI
 
-Wave 7 thin front-end for B2B pilots. Clickable shell that talks to **Service A HTTP APIs only**. No second backend, no client-invented watches, 0 LLM.
+Wave 13 demo-ready front-end for B2B pilots (storyboard beats 0–5). Finished product chrome: sign in → honest pilot checkout stub → add competitor watch → quiet Option B waiting card. Talks to **Service A HTTP APIs only**. No second backend, no client-invented watches, 0 LLM, **no Stripe**.
 
 Primary login UX is the **Google Sign-In (GIS) button** (Wave 12b). Fail-closed when Google code/keys are missing. **NEVER** put `GOOGLE_CLIENT_SECRET` (or any secret) in FE HTML, JS, git, or docs values.
 
@@ -20,7 +20,7 @@ npm run lab
 # http://127.0.0.1:3847/pricing
 ```
 
-Terminal 2 — thin FE:
+Terminal 2 — FE shell:
 
 ```bash
 npm run fe-b2b
@@ -39,30 +39,64 @@ Open the FE URL. The FE server serves `public/fe-b2b/` and **reverse-proxies** `
 
 Override API target from the browser with `?api=http://127.0.0.1:3850` (direct; may need CORS).
 
+## Product shell (Wave 13)
+
+- Brand mark + **PriceWatch** title (no “(thin)” / “B2B thin” chip).
+- Calm tagline: competitor pricing watches / email alerts.
+- No Service A / thin / API jargon on the camera path.
+
 ## Login hook — Google Sign-In (GIS) primary
 
 1. FE calls `GET /health` → reads `auth_mode` (`stub` | `google`) and `google_client_id` (public, safe — only the client ID, never the secret).
-2. **`auth_mode=google` + `google_client_id` present:** loads Google Identity Services (`https://accounts.google.com/gsi/client`), initializes `google.accounts.oauth2.initCodeClient` with the client ID, and renders a **Sign in with Google** button. On click, Google shows the consent popup; the callback receives an authorization `code` → `POST /auth/login { code }` → JWT session. Redirect alignment: GIS `ux_mode: "popup"` uses `redirect_uri=postmessage` implicitly, which matches the backend default (`GOOGLE_REDIRECT_URI` unset → `postmessage`).
-3. **`auth_mode=google` + no `google_client_id`:** fail-closed error — "Google client ID not configured. Sign-in unavailable." No silent fallback.
+2. **`auth_mode=google` + `google_client_id` present:** loads Google Identity Services (`https://accounts.google.com/gsi/client`), initializes `google.accounts.oauth2.initCodeClient` with the client ID, and renders a **Sign in with Google** button. On click, Google shows the consent popup; the callback receives an authorization `code` → `POST /auth/login { code }` → JWT session. Redirect alignment: GIS `ux_mode: "popup"` uses `redirect_uri=postmessage` implicitly, which matches the backend default (`GOOGLE_REDIRECT_URI` unset → `postmessage`). Stub panel and Dev paste-code are **hidden** on this path.
+3. **`auth_mode=google` + no `google_client_id`:** fail-closed error — Google sign-in unavailable (`google_code_required`). No silent fallback.
 4. **`auth_mode=stub`:** shows a clearly labeled **test-only** stub form (`google_subject` + `email`). **Never claim stub as production Google.** Do not set `AUTH_STUB=1` on Render.
-5. A secondary **dev-only** collapsible allows pasting an authorization code manually (for testing/debugging). This is not the primary UX.
+5. A secondary **dev-only** paste-code path remains in the DOM for local shame, but is hidden when `auth_mode=google`.
+
+Signed-in state shows the human email (not a raw JSON hero).
 
 ### Client ID — public config only
 
 `GOOGLE_CLIENT_ID` is exposed on `GET /health` as `google_client_id`. This is safe — client IDs are public by design (they appear in every browser's OAuth redirect URL). **NEVER** expose `GOOGLE_CLIENT_SECRET` or `JWT_SECRET` in FE HTML, JS, git, or docs values.
 
+## Honest checkout stub (Wave 13 — no Stripe)
+
+After sign-in, before Add watch unlocks:
+
+1. **Pilot** plan + price + **Start pilot** CTA.
+2. Visible honesty chip (exact): **Demo / pilot checkout — not a live charge**.
+3. Success: **You're in** / **Pilot started** → unlocks Add watch.
+
+Client-side stub only. No Stripe, no fake card last4, no implied live charge.
+
 ## Add-watch flow
 
 1. Sign in (notify same-email path verifies on login).
-2. Enter pricing URL (+ optional intent) → `POST /b2b/intake/preview`.
-3. Select plan(s) → FE creates a customer via `POST /customers` if needed → `POST /b2b/intake/confirm` with `customer_id` + `selected[{ plan_key }]`.
-4. Server owns allowlist / ownership; FE never bypasses.
+2. Start pilot (honest stub above).
+3. Enter competitor name + pricing URL (+ optional focus plan) → `POST /b2b/intake/preview`.
+4. Select plan(s) → FE creates a customer via `POST /customers` if needed → `POST /b2b/intake/confirm` with `customer_id` + `selected[{ plan_key }]`.
+5. Server owns allowlist / ownership; FE never bypasses. Watches are not invented in the browser.
+
+Camera path uses human copy (Competitor name, Preview plans, Confirm watch) — no on-screen `POST /b2b/…` jargon.
+
+## Watch card + Waiting Option B
+
+After confirm, the product card shows:
+
+- Rival name + URL
+- Baseline plans / $
+- **No price change**
+- **Last checked** (Israel time)
+- Cadence: **Daily · morning Israel time**
+
+Optional collapsed debug details. Prefer preview/confirm data; otherwise honest values matching the previewed plans. No fake busy scanning.
 
 ## What this is not
 
 - Not FE-B2C
 - Not a second API / intake fork
-- Not product accept / production-ready
+- Not live Stripe / Customer-ready pay
+- Not product accept for strangers
 
 ## Hosted on Service A (Wave 8)
 
@@ -84,7 +118,7 @@ Default theme is **light** (Wave 10). Shared CSS tokens live in `public/fe-share
 
 | Path | Role |
 |---|---|
-| `public/fe-b2b/` | Static HTML/JS for the thin B2B UI |
+| `public/fe-b2b/` | Static HTML/JS for the B2B UI |
 | `public/fe-shared/theme.css` | Shared light theme tokens (Wave 10) |
 | Service A `GET /fe-b2b/` | Hosted static serve (Wave 8) |
 | Service A `GET /fe-shared/*` | Shared FE assets (Wave 10) |
@@ -95,13 +129,14 @@ Default theme is **light** (Wave 10). Shared CSS tokens live in `public/fe-share
 
 ## Shame / CI
 
-`test/test-fe-b2b.js` (Wave 7) and `test/test-host-fe-b2b.js` (Wave 8) are wired into `npm test`:
+`test/test-fe-b2b.js` (Wave 7 + 13) and `test/test-host-fe-b2b.js` (Wave 8) are wired into `npm test`:
 
-Wave 7 FE:
+Wave 7 / 13 FE:
 - (a) missing auth → clear error
 - (b) preview → confirm happy path (stub + lab fixture)
 - (c) Wave 4/5/6 API shame still in `npm test`
 - (d) no secrets in git
+- Wave 13: honesty chip, checkout stub, Option B phrases, product watch card; no lab chrome / Stripe / fake last4 on camera path
 
 Wave 8 host:
 - (a) Service A static `/fe-b2b/` serves index

@@ -183,7 +183,7 @@ async function main() {
         `content-type html, got ${res.headers["content-type"]}`
       );
       assert(/PriceWatch/i.test(res.raw), "body looks like FE index");
-      assert(/B2B thin|fe-b2b|Login/i.test(res.raw), "FE content markers");
+      assert(/Sign in|Start pilot|Add watch|fe-b2b/i.test(res.raw), "FE content markers");
     });
 
     await test("SHAME (a): GET /fe-b2b → 200 (no trailing slash)", async () => {
