@@ -11,6 +11,12 @@
  * (e) non-allowlisted blocked
  * (f) kill stops send
  *
+ * Hosted baselines:
+ *   (a) empty local + Neon baseline + live differs → allowlisted customer price_change
+ *   (b) empty local + Neon absent → first_run / no customer mail
+ *   (c) unchanged Neon → unchanged / no mail
+ *   (d) kill stops send; M1b unset; lab still blocked
+ *
  * No real Neon, no real SMTP/Resend, no live Render.
  * Uses an in-memory pg mock injected before requiring production modules.
  */
@@ -253,6 +259,22 @@ function createMockDb() {
         return { rows };
       }
 
+      if (/^SELECT baseline FROM skills WHERE id/i.test(sql)) {
+        const rows = tables.skills
+          .filter((r) => r.id === params[0])
+          .map((r) => ({ baseline: r.baseline }));
+        return { rows };
+      }
+
+      if (/^UPDATE skills/i.test(sql) && /SET baseline/i.test(sql)) {
+        const row = tables.skills.find((r) => r.id === params[0]);
+        if (!row) return { rows: [] };
+        row.baseline =
+          typeof params[1] === "string" ? JSON.parse(params[1]) : params[1];
+        row.updated_at = new Date();
+        return { rows: [{ id: row.id }] };
+      }
+
       if (/^SELECT payload FROM skills ORDER/i.test(sql)) {
         return { rows: tables.skills };
       }
@@ -332,12 +354,12 @@ function addMockWatchTarget(pool, opts) {
   });
 }
 
-function addMockSkill(pool, skill) {
+function addMockSkill(pool, skill, baseline = null) {
   pool._tables.skills.push({
     id: skill.id,
     site: skill.site || null,
     payload: skill,
-    baseline: null,
+    baseline: baseline != null ? baseline : (skill.baseline != null ? skill.baseline : null),
     created_at: new Date(),
     updated_at: new Date(),
   });
@@ -1033,6 +1055,296 @@ async function main() {
     const retriedEntry = afterRetry.find((e) => e.id === claimRes.entry.id);
     assert(retriedEntry, "retried entry must appear in listClaimed");
 
+    restoreModuleCache();
+  });
+
+  // ── Hosted baselines shame (a–d) ─────────────────────────────
+  console.log("\n--- Hosted baselines shame (a–d): Neon previous for compare ---\n");
+
+  await testAsync("SHAME-BASELINE (a): empty local + Neon baseline + live differs → allowlisted customer price_change", async () => {
+    const http = require("http");
+    cleanOutbox();
+    removeKillFile();
+
+    const livePrice = { amount: 9, currency: "USD", period: "month" };
+    const server = await new Promise((resolve) => {
+      const s = http.createServer((req, res) => {
+        res.writeHead(200, { "Content-Type": "application/json" });
+        res.end(JSON.stringify(livePrice));
+      });
+      s.listen(0, "127.0.0.1", () => resolve(s));
+    });
+    const port = server.address().port;
+    const pricingUrl = `http://127.0.0.1:${port}/pricing`;
+
+    const skillId = "hosted-baseline-diff-aaaa1111";
+    const snapshotFile = path.join(PROJECT_ROOT, "data", "snapshots", `${skillId}.json`);
+    if (fs.existsSync(snapshotFile)) fs.unlinkSync(snapshotFile);
+
+    const mockPool = createMockDb();
+    const testSkill = {
+      id: skillId,
+      version: 1,
+      pricing_url: pricingUrl,
+      target_price_description: "Starter plan",
+      site: "example.com",
+      plan_name: "Starter",
+      plan_key: "starter",
+      method: "api",
+      extract_mode: "single",
+      currency: "USD",
+      period: "month",
+      failure_count: 0,
+      skill_status: "healthy",
+    };
+    // Boris-style deliberate mismatch: Neon baseline $1, live ~$9
+    addMockSkill(mockPool, testSkill, {
+      price: { amount: 1, currency: "USD", period: "month" },
+    });
+    injectMockDb(mockPool);
+
+    try {
+      const { runMonitorCheck } = require("../src/monitor-lib");
+      assert(!fs.existsSync(snapshotFile), "local snapshot must be absent (empty GHA snapshots)");
+
+      const result = await runMonitorCheck(skillId, {
+        customerInfo: {
+          customerId: "cust-baseline-a",
+          customerEmail: "pilot@team.dev",
+          customerName: "Pilot",
+        },
+      });
+
+      assert(result.status === "price_changed", `expected price_changed, got ${result.status} / ${result.reason || result.error || ""}`);
+      assert(result.reason !== "first_run", "must NOT soft-pass as first_run when Neon baseline differs");
+      assert(result.emailPath, "must write customer price_change outbox email");
+      assert(fs.existsSync(result.emailPath), "email path must exist");
+
+      const email = JSON.parse(fs.readFileSync(result.emailPath, "utf8"));
+      assert(email.type === "price_change", `email type must be price_change, got ${email.type}`);
+      assert(email.type !== "ops_alert", "must NOT use ops-alert as change mail");
+      assert(email.customer_email === "pilot@team.dev", "customer_email must be set");
+      assert(Number(email.before.amount) === 1, `before must be Neon baseline $1, got ${email.before.amount}`);
+      assert(Number(email.after.amount) === 9, `after must be live $9, got ${email.after.amount}`);
+
+      const mailer = runMailer({
+        PRICEWATCH_M1B_UNLOCK: "",
+        PRICEWATCH_MAIL_ALLOWLIST: "pilot@team.dev",
+        PRICEWATCH_TEST_EMAIL: "",
+        PRICEWATCH_OPS_EMAIL: "",
+        PRICEWATCH_KILL: "",
+      });
+      assert(!(mailer.stdout || "").includes("BLOCKED"), "allowlisted customer price_change must NOT be blocked");
+
+      const neonRow = mockPool._tables.skills.find((r) => r.id === skillId);
+      assert(neonRow && neonRow.baseline, "Neon baseline must be persisted after extract");
+      assert(Number(neonRow.baseline.price.amount) === 9, "Neon baseline should update to live $9");
+    } finally {
+      server.close();
+      if (fs.existsSync(snapshotFile)) fs.unlinkSync(snapshotFile);
+      cleanOutbox();
+      restoreModuleCache();
+    }
+  });
+
+  await testAsync("SHAME-BASELINE (b): empty local + Neon baseline absent → honest first_run / no customer mail", async () => {
+    const http = require("http");
+    cleanOutbox();
+
+    const livePrice = { amount: 9, currency: "USD", period: "month" };
+    const server = await new Promise((resolve) => {
+      const s = http.createServer((req, res) => {
+        res.writeHead(200, { "Content-Type": "application/json" });
+        res.end(JSON.stringify(livePrice));
+      });
+      s.listen(0, "127.0.0.1", () => resolve(s));
+    });
+    const port = server.address().port;
+    const pricingUrl = `http://127.0.0.1:${port}/pricing`;
+
+    const skillId = "hosted-baseline-absent-bbbb2222";
+    const snapshotFile = path.join(PROJECT_ROOT, "data", "snapshots", `${skillId}.json`);
+    if (fs.existsSync(snapshotFile)) fs.unlinkSync(snapshotFile);
+
+    const mockPool = createMockDb();
+    const testSkill = {
+      id: skillId,
+      version: 1,
+      pricing_url: pricingUrl,
+      target_price_description: "Starter plan",
+      site: "example.com",
+      method: "api",
+      extract_mode: "single",
+      currency: "USD",
+      period: "month",
+      failure_count: 0,
+      skill_status: "healthy",
+    };
+    addMockSkill(mockPool, testSkill, null);
+    injectMockDb(mockPool);
+
+    try {
+      const { runMonitorCheck } = require("../src/monitor-lib");
+      const result = await runMonitorCheck(skillId, {
+        customerInfo: {
+          customerId: "cust-baseline-b",
+          customerEmail: "pilot@team.dev",
+          customerName: "Pilot",
+        },
+      });
+
+      assert(result.status === "no_email", `expected no_email, got ${result.status}`);
+      assert(result.reason === "first_run", `expected first_run, got ${result.reason}`);
+      assert(!result.emailPath, "must NOT write customer mail on first_run");
+
+      const priceChangeFiles = outboxJsonFiles().filter((f) => f.startsWith("price-change_"));
+      assert(priceChangeFiles.length === 0, "outbox must have no customer price_change on first_run");
+
+      const neonRow = mockPool._tables.skills.find((r) => r.id === skillId);
+      assert(neonRow && neonRow.baseline, "first_run must persist new Neon baseline");
+      assert(Number(neonRow.baseline.price.amount) === 9, "persisted baseline should be live $9");
+    } finally {
+      server.close();
+      if (fs.existsSync(snapshotFile)) fs.unlinkSync(snapshotFile);
+      cleanOutbox();
+      restoreModuleCache();
+    }
+  });
+
+  await testAsync("SHAME-BASELINE (c): unchanged Neon baseline → unchanged / no mail", async () => {
+    const http = require("http");
+    cleanOutbox();
+
+    const livePrice = { amount: 9, currency: "USD", period: "month" };
+    const server = await new Promise((resolve) => {
+      const s = http.createServer((req, res) => {
+        res.writeHead(200, { "Content-Type": "application/json" });
+        res.end(JSON.stringify(livePrice));
+      });
+      s.listen(0, "127.0.0.1", () => resolve(s));
+    });
+    const port = server.address().port;
+    const pricingUrl = `http://127.0.0.1:${port}/pricing`;
+
+    const skillId = "hosted-baseline-same-cccc3333";
+    const snapshotFile = path.join(PROJECT_ROOT, "data", "snapshots", `${skillId}.json`);
+    if (fs.existsSync(snapshotFile)) fs.unlinkSync(snapshotFile);
+
+    const mockPool = createMockDb();
+    const testSkill = {
+      id: skillId,
+      version: 1,
+      pricing_url: pricingUrl,
+      target_price_description: "Starter plan",
+      site: "example.com",
+      method: "api",
+      extract_mode: "single",
+      currency: "USD",
+      period: "month",
+      failure_count: 0,
+      skill_status: "healthy",
+    };
+    addMockSkill(mockPool, testSkill, {
+      price: { amount: 9, currency: "USD", period: "month" },
+    });
+    injectMockDb(mockPool);
+
+    try {
+      const { runMonitorCheck } = require("../src/monitor-lib");
+      const result = await runMonitorCheck(skillId, {
+        customerInfo: {
+          customerId: "cust-baseline-c",
+          customerEmail: "pilot@team.dev",
+          customerName: "Pilot",
+        },
+      });
+
+      assert(result.status === "no_email", `expected no_email, got ${result.status}`);
+      assert(result.reason === "unchanged", `expected unchanged, got ${result.reason}`);
+      assert(!result.emailPath, "must NOT write mail when unchanged");
+
+      const priceChangeFiles = outboxJsonFiles().filter((f) => f.startsWith("price-change_"));
+      assert(priceChangeFiles.length === 0, "outbox must stay empty when unchanged");
+    } finally {
+      server.close();
+      if (fs.existsSync(snapshotFile)) fs.unlinkSync(snapshotFile);
+      cleanOutbox();
+      restoreModuleCache();
+    }
+  });
+
+  test("SHAME-BASELINE (d): kill stops send; M1b unset; lab still blocked", () => {
+    cleanOutbox();
+    removeKillFile();
+
+    assert(
+      !process.env.PRICEWATCH_M1B_UNLOCK || process.env.PRICEWATCH_M1B_UNLOCK === "",
+      "PRICEWATCH_M1B_UNLOCK must be unset for hosted path"
+    );
+
+    writeOutboxEmail("price-change_shame-baseline-d-kill.json", {
+      type: "price_change",
+      customer_email: "pilot@team.dev",
+      subject: "PriceWatch: baseline kill test",
+      body: "Kill test body",
+    });
+
+    const result = runMailer({
+      PRICEWATCH_KILL: "1",
+      PRICEWATCH_M1B_UNLOCK: "",
+      PRICEWATCH_MAIL_ALLOWLIST: "pilot@team.dev",
+      PRICEWATCH_TEST_EMAIL: "",
+      PRICEWATCH_OPS_EMAIL: "",
+    });
+
+    assert(result.code === 0, `expected exit 0, got ${result.code}`);
+    assert((result.stdout || "").includes("Kill switch"), "must log kill switch");
+    assert(
+      !sentMarkerExists("price-change_shame-baseline-d-kill.json"),
+      "must NOT create .sent while killed"
+    );
+
+    const enqueueSrc = fs.readFileSync(
+      path.join(PROJECT_ROOT, "scripts", "enqueue-daily-ticks.js"),
+      "utf8"
+    );
+    assert(enqueueSrc.includes("isLabHost"), "enqueue must still block lab hosts");
+    assert(
+      enqueueSrc.includes("lab-blocked") || enqueueSrc.includes("localhost"),
+      "enqueue must still log lab-blocked/localhost"
+    );
+
+    cleanOutbox();
+  });
+
+  test("SHAME-BASELINE: coerceSinglePreviousSnapshot reads Starter plans plant ($1)", () => {
+    restoreModuleCache();
+    const { coerceSinglePreviousSnapshot } = require("../src/monitor-lib");
+    const coerced = coerceSinglePreviousSnapshot([
+      { plan: "Starter", plan_key: "starter", price: 1, currency: "USD", billing: "monthly" },
+      { plan: "Business", plan_key: "business", price: 19, currency: "USD", billing: "monthly" },
+    ]);
+    assert(coerced && coerced.price, "must coerce plans plant to single previous");
+    assert(Number(coerced.price.amount) === 1, `Starter amount must be 1, got ${coerced.price.amount}`);
+    assert(coerced.price.period === "month", "monthly billing → month period");
+    restoreModuleCache();
+  });
+
+  test("skill-store exports loadBaseline and saveBaseline", () => {
+    restoreModuleCache();
+    const store = require("../src/skill-store");
+    assert(typeof store.loadBaseline === "function", "loadBaseline must be exported");
+    assert(typeof store.saveBaseline === "function", "saveBaseline must be exported");
+    restoreModuleCache();
+  });
+
+  test("monitor-lib exports Neon previous load/save helpers", () => {
+    restoreModuleCache();
+    const lib = require("../src/monitor-lib");
+    assert(typeof lib.loadPreviousSingleSnapshot === "function", "loadPreviousSingleSnapshot must be exported");
+    assert(typeof lib.persistSingleSnapshot === "function", "persistSingleSnapshot must be exported");
+    assert(typeof lib.loadPreviousLadderSnapshot === "function", "loadPreviousLadderSnapshot must be exported");
+    assert(typeof lib.persistLadderSnapshot === "function", "persistLadderSnapshot must be exported");
     restoreModuleCache();
   });
 
