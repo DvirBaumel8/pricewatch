@@ -2,16 +2,15 @@
 "use strict";
 
 /**
- * Enqueue daily monitor ticks for all customers with skill_ready competitors.
+ * Enqueue daily monitor ticks for all B2B WatchTargets with skill_ready status.
  *
- * Scans data/customers.json for competitors with status "skill_ready",
- * resolves the skill ID from the skill file, and enqueues a monitor tick
- * for each into pendingMonitorTicks (data/monitor-ticks.json).
+ * Wave 4: reads from Neon watch_targets table — NOT data/customers.json.
+ * Falls back to file-based monitor-queue when DATABASE_URL is not set (lab only).
  *
- * Idempotent: at most one pending tick per (customer, skill, Jerusalem calendar day).
- * Second run same day → no duplicates.
+ * Idempotent: at most one claimed ledger row per (watch_target, Jerusalem day).
+ * Second run same day → no duplicates (ON CONFLICT DO NOTHING).
  *
- * Kill switch: if data/KILL exists or PRICEWATCH_KILL=1 → no-op.
+ * Kill switch: PRICEWATCH_KILL=1 or data/KILL → no-op.
  *
  * Usage:
  *   node scripts/enqueue-daily-ticks.js
@@ -20,10 +19,8 @@
 
 const fs = require("fs");
 const path = require("path");
-const monitorQueue = require("../src/monitor-queue");
 
 const KILL_FILE = path.join(__dirname, "..", "data", "KILL");
-const CUSTOMERS_FILE = path.join(__dirname, "..", "data", "customers.json");
 
 function isKilled() {
   if (process.env.PRICEWATCH_KILL === "1") return true;
@@ -31,36 +28,61 @@ function isKilled() {
   return false;
 }
 
-function loadCustomers() {
-  if (!fs.existsSync(CUSTOMERS_FILE)) return {};
-  try {
-    return JSON.parse(fs.readFileSync(CUSTOMERS_FILE, "utf8"));
-  } catch {
-    return {};
+async function runNeonPath() {
+  const { query } = require("../src/db");
+  const ledger = require("../src/neon-ledger");
+  const day = ledger.jerusalemDate();
+
+  console.log(`[enqueue-daily] Neon path — Jerusalem date: ${day}`);
+
+  const res = await query(
+    `SELECT wt.id, wt.customer_id, wt.skill_id, wt.label
+     FROM watch_targets wt
+     WHERE wt.surface = 'b2b' AND wt.status = 'skill_ready'
+     ORDER BY wt.created_at ASC`
+  );
+
+  const targets = res.rows;
+  console.log(`[enqueue-daily] Found ${targets.length} b2b skill_ready WatchTarget(s) in Neon`);
+
+  let claimed = 0;
+  let skipped = 0;
+
+  for (const wt of targets) {
+    const result = await ledger.claim({
+      watchTargetId: wt.id,
+      customerId: wt.customer_id,
+      skillId: wt.skill_id,
+    });
+
+    if (result.killed) {
+      console.log("[enqueue-daily] Kill switch activated mid-run — stopping.");
+      return;
+    }
+
+    if (result.created) {
+      console.log(`  [claim] ${wt.customer_id} / ${wt.skill_id} (${wt.label}) → claimed`);
+      claimed++;
+    } else {
+      console.log(`  [skip]  ${wt.customer_id} / ${wt.skill_id} (${wt.label}) → already exists for ${day}`);
+      skipped++;
+    }
   }
+
+  console.log(`[enqueue-daily] Done (Neon): ${claimed} claimed, ${skipped} skipped`);
 }
 
-function resolveSkillId(skillPath) {
-  const fullPath = path.resolve(__dirname, "..", skillPath);
-  if (!fs.existsSync(fullPath)) return null;
-  try {
-    const skill = JSON.parse(fs.readFileSync(fullPath, "utf8"));
-    return skill.id || null;
-  } catch {
-    return null;
-  }
-}
+function runFilePath() {
+  const monitorQueue = require("../src/monitor-queue");
+  const CUSTOMERS_FILE = path.join(__dirname, "..", "data", "customers.json");
 
-function main() {
-  console.log(`[enqueue-daily] ${new Date().toISOString()}`);
-  console.log(`[enqueue-daily] Jerusalem date: ${monitorQueue.jerusalemDate()}`);
+  console.log(`[enqueue-daily] File fallback path — Jerusalem date: ${monitorQueue.jerusalemDate()}`);
 
-  if (isKilled()) {
-    console.log("[enqueue-daily] Kill switch active — no ticks enqueued.");
-    return;
+  let store = {};
+  if (fs.existsSync(CUSTOMERS_FILE)) {
+    try { store = JSON.parse(fs.readFileSync(CUSTOMERS_FILE, "utf8")); } catch { store = {}; }
   }
 
-  const store = loadCustomers();
   const customers = store.customers || {};
   let enqueued = 0;
   let skipped = 0;
@@ -77,12 +99,17 @@ function main() {
         continue;
       }
 
-      const skillId = resolveSkillId(comp.skillPath);
-      if (!skillId) {
+      const fullPath = path.resolve(__dirname, "..", comp.skillPath);
+      if (!fs.existsSync(fullPath)) {
         console.log(`  [warn] Customer ${customerId} competitor ${comp.id}: skill file not found at ${comp.skillPath}`);
         errors++;
         continue;
       }
+      let skillId = null;
+      try {
+        const skill = JSON.parse(fs.readFileSync(fullPath, "utf8"));
+        skillId = skill.id || null;
+      } catch { errors++; continue; }
 
       const result = monitorQueue.enqueue({
         customerId,
@@ -102,7 +129,26 @@ function main() {
     }
   }
 
-  console.log(`[enqueue-daily] Done: ${enqueued} enqueued, ${skipped} skipped, ${errors} errors`);
+  console.log(`[enqueue-daily] Done (file): ${enqueued} enqueued, ${skipped} skipped, ${errors} errors`);
 }
 
-main();
+async function main() {
+  console.log(`[enqueue-daily] ${new Date().toISOString()}`);
+
+  if (isKilled()) {
+    console.log("[enqueue-daily] Kill switch active — no ticks enqueued.");
+    return;
+  }
+
+  const { getPool } = require("../src/db");
+  if (getPool()) {
+    await runNeonPath();
+  } else {
+    runFilePath();
+  }
+}
+
+main().catch((err) => {
+  console.error("[enqueue-daily] Fatal:", err.message);
+  process.exit(1);
+});
