@@ -57,11 +57,20 @@
       <p class="user-line" id="userLine">Not signed in.</p>
 
       <div id="googlePanel" class="hidden">
-        <label for="googleCode">Google authorization code</label>
-        <input id="googleCode" type="text" autocomplete="off" spellcheck="false"
-               placeholder="Paste code from Google OAuth redirect">
-        <button class="btn btn-primary" id="googleLoginBtn" type="button">Sign in with Google code</button>
-        <p class="note">Live Google OAuth UI is PARKED (Wave 6 Phase B). Without a real code, login fails closed with <code>google_code_required</code>. UI will not pretend Google succeeded without a code.</p>
+        <div id="gisButtonWrap">
+          <button class="btn btn-primary" id="gisSignInBtn" type="button" disabled>Sign in with Google</button>
+        </div>
+        <p id="gisStatus" class="status"></p>
+        <details id="devCodeDetails" style="margin-top: 12px;">
+          <summary style="cursor:pointer; font-size: 0.82rem; color: var(--dim);">Dev only: paste authorization code</summary>
+          <div style="margin-top: 8px;">
+            <label for="googleCode">Google authorization code</label>
+            <input id="googleCode" type="text" autocomplete="off" spellcheck="false"
+                   placeholder="Paste code from Google OAuth redirect">
+            <button class="btn btn-ghost" id="googleLoginBtn" type="button">Sign in with code</button>
+            <p class="note">Paste a code obtained from a manual OAuth flow. UI will not pretend Google succeeded without a code. Without keys/code, login fails closed with <code>google_code_required</code>.</p>
+          </div>
+        </details>
       </div>
 
       <div id="stubPanel" class="hidden">
@@ -138,6 +147,7 @@
     token: null,
     user: null,
     authMode: null, // "stub" | "google" | null
+    googleClientId: null,
     customerId: null,
     offers: [],
     slots: null,
@@ -212,11 +222,19 @@
       );
     } else if (state.authMode === "google") {
       $("googlePanel").classList.remove("hidden");
-      showBanner(
-        $("authModeBanner"),
-        "Service A auth_mode=google — pass a real Google OAuth code. Without keys/code, login fails closed (google_code_required). Live consent UI still PARKED.",
-        "info"
-      );
+      if (state.googleClientId) {
+        showBanner(
+          $("authModeBanner"),
+          "Service A auth_mode=google — use the Sign in with Google button below.",
+          "info"
+        );
+      } else {
+        showBanner(
+          $("authModeBanner"),
+          "Service A auth_mode=google — Google client ID not configured. Sign-in unavailable (google_code_required). Contact admin.",
+          "err"
+        );
+      }
     } else {
       $("unknownPanel").classList.remove("hidden");
       showBanner(
@@ -320,13 +338,80 @@
     try {
       const data = await api("GET", "/health");
       state.authMode = data.auth_mode || null;
+      state.googleClientId = data.google_client_id || null;
       updateAuthPanels();
+      if (state.authMode === "google" && state.googleClientId && !state.user) {
+        initGisButton();
+      }
       return data;
     } catch (e) {
       state.authMode = null;
+      state.googleClientId = null;
       updateAuthPanels();
       showBanner($("errorBanner"), e.message || "Health check failed", "err");
       throw e;
+    }
+  }
+
+  var _gisClient = null;
+
+  function initGisButton() {
+    if (_gisClient) return;
+    var btn = $("gisSignInBtn");
+    var wrap = $("gisButtonWrap");
+    var statusEl = $("gisStatus");
+
+    function onGisLoaded() {
+      if (typeof google === "undefined" || !google.accounts || !google.accounts.oauth2) {
+        statusEl.textContent = "Google Identity Services failed to initialize.";
+        statusEl.className = "status err";
+        return;
+      }
+      _gisClient = google.accounts.oauth2.initCodeClient({
+        client_id: state.googleClientId,
+        scope: "email profile openid",
+        ux_mode: "popup",
+        callback: function (response) {
+          if (response.error) {
+            setStatus($("loginStatus"), "Google Sign-In error: " + response.error, "err");
+            showBanner($("errorBanner"), "Google Sign-In error: " + (response.error_description || response.error), "err");
+            return;
+          }
+          if (!response.code) {
+            setStatus($("loginStatus"), "google_code_required: no authorization code received from Google.", "err");
+            return;
+          }
+          doLogin({ code: response.code });
+        },
+      });
+      btn.disabled = false;
+      btn.addEventListener("click", function () {
+        if (_gisClient) _gisClient.requestCode();
+      });
+      statusEl.textContent = "";
+      statusEl.className = "status";
+    }
+
+    if (typeof google !== "undefined" && google.accounts && google.accounts.oauth2) {
+      onGisLoaded();
+      return;
+    }
+
+    statusEl.textContent = "Loading Google Sign-In…";
+    statusEl.className = "status";
+    var script = document.getElementById("gis-script");
+    if (!script) {
+      script = document.createElement("script");
+      script.id = "gis-script";
+      script.src = "https://accounts.google.com/gsi/client";
+      script.async = true;
+      script.defer = true;
+      script.onload = onGisLoaded;
+      script.onerror = function () {
+        statusEl.textContent = "Failed to load Google Sign-In. Check network or ad-blockers. Use dev paste-code below as fallback.";
+        statusEl.className = "status err";
+      };
+      document.head.appendChild(script);
     }
   }
 
@@ -538,7 +623,7 @@
         showBanner(
           $("authModeBanner"),
           code === "google_code_required"
-            ? "Fail-closed: Google authorization code required. Live Google consent UI is PARKED."
+            ? "Fail-closed: Google authorization code required. Use the Sign in with Google button or check GIS configuration."
             : "Stub login needs google_subject + email (AUTH_STUB test-only).",
           "err"
         );
@@ -551,7 +636,7 @@
     if (!code) {
       setStatus(
         $("loginStatus"),
-        "google_code_required: paste a real Google authorization code (or unlock Wave 6 Phase B).",
+        "google_code_required: paste a real Google authorization code.",
         "err"
       );
       showBanner(

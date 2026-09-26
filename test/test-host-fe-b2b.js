@@ -117,7 +117,7 @@ async function main() {
     assert(/\/customers/.test(html), "calls /customers");
   });
 
-  await test("docs/fe-b2b.md documents hosted /fe-b2b/ + same-origin", () => {
+  await test("docs/fe-b2b.md documents hosted /fe-b2b/ + same-origin + GIS primary", () => {
     assert(fs.existsSync(DOCS), "docs/fe-b2b.md missing");
     const text = fs.readFileSync(DOCS, "utf8");
     assert(/\/fe-b2b\//.test(text), "docs mention /fe-b2b/");
@@ -125,7 +125,7 @@ async function main() {
     assert(/same-origin|same host/i.test(text), "same-origin documented");
     assert(/No new paid|no new paid/i.test(text), "no new paid service");
     assert(/AUTH_STUB/i.test(text) && /Never.*prod|never.*Render|not.*prod/i.test(text), "AUTH_STUB not prod");
-    assert(/PARKED|Phase B/i.test(text), "OAuth parked");
+    assert(/GIS|Google Sign-In|Google Identity Services/i.test(text), "GIS primary documented");
     assert(/test-host-fe-b2b/i.test(text), "Wave 8 shame named in docs");
   });
 

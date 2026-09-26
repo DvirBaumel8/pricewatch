@@ -456,13 +456,17 @@ async function handleRequest(req, res) {
 
     switch (route.handler) {
       case "health": {
-        return json(res, 200, {
+        const healthBody = {
           status: "ok",
           service: "pricewatch-api",
           git_sha: GIT_SHA,
           neon: watchTargets.dbAvailable() ? "connected" : "unavailable",
           auth_mode: auth.isStub() ? "stub" : "google",
-        });
+        };
+        if (!auth.isStub() && process.env.GOOGLE_CLIENT_ID) {
+          healthBody.google_client_id = process.env.GOOGLE_CLIENT_ID;
+        }
+        return json(res, 200, healthBody);
       }
 
       case "authLogin": {

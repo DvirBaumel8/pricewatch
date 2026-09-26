@@ -97,6 +97,14 @@ Login accepts `{ code }` — a Google authorization code from the
 frontend OAuth flow. The server exchanges it with Google for an
 `id_token`, extracts `sub` and `email`, and creates/finds the user.
 
+### Google Sign-In (GIS) button — frontend integration (Wave 12b)
+
+The FE (B2B and B2C) uses [Google Identity Services](https://developers.google.com/identity/oauth2/web/guides/overview) (`google.accounts.oauth2.initCodeClient`) to render a **Sign in with Google** button as the primary login UX. When the user clicks it, Google shows a consent popup; the JS callback receives an authorization `code`, which the FE sends to `POST /auth/login { code }`.
+
+**Client ID exposure:** `GOOGLE_CLIENT_ID` is exposed on `GET /health` as `google_client_id` (public — client IDs appear in every OAuth redirect URL). **NEVER** expose `GOOGLE_CLIENT_SECRET` or `JWT_SECRET` in FE code, HTML, git, or docs values.
+
+**Redirect alignment:** GIS `ux_mode: "popup"` uses `redirect_uri=postmessage` implicitly, matching the backend default (`GOOGLE_REDIRECT_URI` unset → `postmessage`). If `GOOGLE_REDIRECT_URI` is set to a specific URI, ensure GIS is configured with the same `redirect_uri`.
+
 ## API Routes
 
 ### Public (no auth required)

@@ -461,16 +461,18 @@ async function main() {
     );
   });
 
-  await test("FE HTML fail-closed for google_code_required + AUTH_STUB test-only", () => {
+  await test("FE HTML fail-closed for google_code_required + AUTH_STUB test-only + GIS button primary", () => {
     const html = fs.readFileSync(FE_HTML, "utf8");
     assert(/google_code_required/.test(html), "must surface google_code_required");
     assert(/AUTH_STUB/.test(html), "must mention AUTH_STUB");
     assert(/test-only|TEST-ONLY|test \/ local/i.test(html), "stub labeled test-only");
-    assert(/PARKED/i.test(html), "live Google noted as PARKED");
+    assert(/gisButtonWrap|gisSignInBtn|Sign in with Google/i.test(html), "GIS Sign-In button is primary UX");
+    assert(/initCodeClient|google\.accounts\.oauth2/i.test(html), "GIS code client integration present");
     assert(
       /will not pretend Google succeeded/i.test(html),
       "must not pretend Google succeeded without code"
     );
+    assert(/devCodeDetails|Dev only/i.test(html), "paste-code is secondary dev-only path");
   });
 
   await test("FE happy path is same-origin (no ?api= required)", () => {
@@ -484,7 +486,7 @@ async function main() {
     );
   });
 
-  await test("docs/fe-b2c.md documents Service A + host /fe-b2c/ + stub test-only", () => {
+  await test("docs/fe-b2c.md documents Service A + host /fe-b2c/ + stub test-only + GIS primary", () => {
     assert(fs.existsSync(DOCS), "docs/fe-b2c.md missing");
     const text = fs.readFileSync(DOCS, "utf8");
     assert(/SERVICE_A_URL|service-a/i.test(text), "docs how to run with Service A");
@@ -492,7 +494,9 @@ async function main() {
     assert(/same-origin|same host/i.test(text), "same-origin documented");
     assert(/No new paid|no new paid/i.test(text), "no new paid service");
     assert(/AUTH_STUB/i.test(text) && /Never.*prod|never.*Render|not.*prod/i.test(text), "AUTH_STUB not prod");
-    assert(/PARKED|Phase B/i.test(text), "OAuth parked");
+    assert(/GIS|Google Sign-In|Google Identity Services/i.test(text), "GIS primary documented");
+    assert(/google_client_id|client.id|client ID/i.test(text), "client ID documented");
+    assert(/never.*secret.*FE|NEVER.*secret/i.test(text), "never secret in FE documented");
     assert(/test-fe-b2c/i.test(text), "shame named in docs");
     assert(/free-3|b2c_slots_exhausted/i.test(text), "free-3 documented");
   });

@@ -406,26 +406,30 @@ async function main() {
     );
   });
 
-  await test("FE HTML fail-closed for google_code_required + AUTH_STUB test-only", () => {
+  await test("FE HTML fail-closed for google_code_required + AUTH_STUB test-only + GIS button primary", () => {
     const html = fs.readFileSync(FE_HTML, "utf8");
     assert(/google_code_required/.test(html), "must surface google_code_required");
     assert(/AUTH_STUB/.test(html), "must mention AUTH_STUB");
     assert(/test-only|TEST-ONLY|test \/ local/i.test(html), "stub labeled test-only");
-    assert(/PARKED/i.test(html), "live Google noted as PARKED");
+    assert(/gisButtonWrap|gisSignInBtn|Sign in with Google/i.test(html), "GIS Sign-In button is primary UX");
+    assert(/initCodeClient|google\.accounts\.oauth2/i.test(html), "GIS code client integration present");
     assert(
       /will not pretend Google succeeded/i.test(html),
       "must not pretend Google succeeded without code"
     );
+    assert(/devCodeDetails|Dev only/i.test(html), "paste-code is secondary dev-only path");
   });
 
-  await test("docs/fe-b2b.md documents Service A + stub test-only", () => {
+  await test("docs/fe-b2b.md documents Service A + stub test-only + GIS primary", () => {
     const docs = path.join(PROJECT_ROOT, "docs", "fe-b2b.md");
     assert(fs.existsSync(docs), "docs/fe-b2b.md missing");
     const text = fs.readFileSync(docs, "utf8");
     assert(/SERVICE_A_URL|service-a/i.test(text), "docs how to run with Service A");
     assert(/AUTH_STUB/i.test(text), "docs AUTH_STUB");
     assert(/test-only|Never.*prod|never prod/i.test(text), "stub not prod");
-    assert(/PARKED|Phase B/i.test(text), "OAuth parked noted");
+    assert(/GIS|Google Sign-In|Google Identity Services/i.test(text), "GIS primary documented");
+    assert(/google_client_id|client.id|client ID/i.test(text), "client ID documented");
+    assert(/never.*secret.*FE|NEVER.*secret/i.test(text), "never secret in FE documented");
   });
 
   // ── (a) missing auth → clear error ─────────────────────────────
