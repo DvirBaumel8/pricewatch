@@ -1,0 +1,550 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>PriceWatch — B2B (thin)</title>
+  <style>
+    :root {
+      --bg: #0a0b10;
+      --panel: #12151f;
+      --border: #262a36;
+      --text: #f2f3f7;
+      --muted: #9aa3b5;
+      --dim: #6b7385;
+      --accent: #6d7cff;
+      --accent-2: #8b97ff;
+      --good: #3ecf8e;
+      --warn: #f0b429;
+      --danger: #ff6b6b;
+      --font: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: var(--font);
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      padding: 32px 16px 64px;
+    }
+    .wrap { max-width: 640px; margin: 0 auto; }
+    .brand { display: flex; align-items: center; gap: 12px; margin-bottom: 8px; }
+    .mark {
+      width: 36px; height: 36px; border-radius: 10px;
+      background: linear-gradient(135deg, #6d7cff, #3b4de8);
+      display: grid; place-items: center; font-weight: 800; color: #fff;
+    }
+    h1 { font-size: 1.35rem; font-weight: 700; letter-spacing: -0.02em; }
+    .tag { color: var(--dim); font-size: 0.9rem; margin-bottom: 24px; }
+    .card {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 20px;
+      margin-bottom: 16px;
+    }
+    .card h2 {
+      font-size: 0.72rem; font-weight: 700; letter-spacing: 0.08em;
+      text-transform: uppercase; color: var(--dim); margin-bottom: 14px;
+    }
+    label { display: block; font-size: 0.85rem; color: var(--muted); margin-bottom: 6px; }
+    input[type="text"], input[type="email"], input[type="url"], input[type="password"] {
+      width: 100%; background: #0f1117; border: 1px solid var(--border);
+      color: var(--text); border-radius: 10px; padding: 12px 14px;
+      font-size: 1rem; outline: none; margin-bottom: 12px;
+    }
+    input:focus { border-color: var(--accent); }
+    .row { display: flex; gap: 10px; flex-wrap: wrap; }
+    .row > * { flex: 1; min-width: 140px; }
+    .btn {
+      border: none; border-radius: 10px; padding: 12px 16px;
+      font-size: 0.95rem; font-weight: 650; cursor: pointer;
+      transition: background 0.15s, opacity 0.15s;
+    }
+    .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+    .btn-primary { background: var(--accent); color: #fff; }
+    .btn-primary:hover:not(:disabled) { background: var(--accent-2); }
+    .btn-ghost {
+      background: #151822; color: var(--text); border: 1px solid var(--border);
+    }
+    .btn-ghost:hover:not(:disabled) { border-color: #3a4154; }
+    .status {
+      min-height: 1.4em; font-size: 0.92rem; color: var(--muted);
+      margin-top: 10px; white-space: pre-wrap;
+    }
+    .status.ok { color: var(--good); }
+    .status.warn { color: var(--warn); }
+    .status.err { color: var(--danger); }
+    .banner {
+      border-radius: 10px; padding: 12px 14px; margin-bottom: 16px;
+      font-size: 0.92rem; line-height: 1.45;
+    }
+    .banner.warn { background: #2a1f12; border: 1px solid #5a3d18; color: var(--warn); }
+    .banner.info { background: #121a2e; border: 1px solid #2a3a5a; color: var(--accent-2); }
+    .banner.err { background: #2a1216; border: 1px solid #5a2430; color: var(--danger); }
+    .banner.ok { background: #12201a; border: 1px solid #2a4638; color: #9fd6b8; }
+    .hidden { display: none !important; }
+    .chip {
+      display: inline-flex; align-items: center; gap: 6px;
+      background: #1a2033; color: var(--accent-2);
+      border-radius: 999px; padding: 4px 10px;
+      font-size: 0.8rem; font-weight: 600; margin-left: 8px;
+    }
+    .plan-list { display: flex; flex-direction: column; gap: 8px; margin: 8px 0 14px; }
+    .plan-row {
+      display: flex; align-items: center; gap: 12px;
+      padding: 12px 14px; background: #0f1117;
+      border: 1px solid var(--border); border-radius: 10px; cursor: pointer;
+    }
+    .plan-row:hover { border-color: #3a4154; }
+    .plan-row input { width: 18px; height: 18px; accent-color: var(--accent); flex-shrink: 0; }
+    .plan-name { font-weight: 650; min-width: 90px; }
+    .plan-price { color: var(--accent-2); font-weight: 700; min-width: 70px; }
+    .plan-meta { color: var(--dim); font-size: 0.85rem; flex: 1; }
+    .user-line { color: var(--muted); font-size: 0.9rem; margin-bottom: 8px; }
+    .note { color: var(--dim); font-size: 0.82rem; margin-top: 8px; line-height: 1.4; }
+    code { font-size: 0.85em; background: #1a1d28; padding: 1px 6px; border-radius: 4px; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="brand">
+      <div class="mark">P</div>
+      <div>
+        <h1>PriceWatch <span class="chip">B2B thin</span></h1>
+      </div>
+    </div>
+    <p class="tag">Login → paste competitor URL → preview plans → confirm watch. Talks to Service A only.</p>
+
+    <div id="authModeBanner" class="banner info" role="status">Checking Service A…</div>
+    <div id="errorBanner" class="banner err hidden" role="alert"></div>
+
+    <!-- Login -->
+    <section class="card" id="loginCard">
+      <h2>1 · Login</h2>
+      <p class="user-line" id="userLine">Not signed in.</p>
+
+      <div id="googlePanel" class="hidden">
+        <label for="googleCode">Google authorization code</label>
+        <input id="googleCode" type="text" autocomplete="off" spellcheck="false"
+               placeholder="Paste code from Google OAuth redirect">
+        <button class="btn btn-primary" id="googleLoginBtn" type="button">Sign in with Google code</button>
+        <p class="note">Live Google OAuth UI is PARKED (Wave 6 Phase B). Without a real code, login fails closed with <code>google_code_required</code>.</p>
+      </div>
+
+      <div id="stubPanel" class="hidden">
+        <div class="banner warn" style="margin-bottom:12px">
+          AUTH_STUB is active — <strong>test / local shame only</strong>. Never use stub login as production Google.
+        </div>
+        <div class="row">
+          <div>
+            <label for="stubEmail">Email</label>
+            <input id="stubEmail" type="email" value="pilot@example.com" autocomplete="username">
+          </div>
+          <div>
+            <label for="stubSubject">google_subject</label>
+            <input id="stubSubject" type="text" value="stub-pilot-1" autocomplete="off">
+          </div>
+        </div>
+        <button class="btn btn-primary" id="stubLoginBtn" type="button">Stub login (test-only)</button>
+      </div>
+
+      <div id="unknownPanel" class="hidden">
+        <p class="note">Could not determine auth mode. Is Service A running?</p>
+        <button class="btn btn-ghost" id="retryHealthBtn" type="button">Retry health</button>
+      </div>
+
+      <p class="status" id="loginStatus"></p>
+    </section>
+
+    <!-- Add watch -->
+    <section class="card" id="watchCard">
+      <h2>2 · Add watch</h2>
+      <label for="customerName">Customer name</label>
+      <input id="customerName" type="text" value="Pilot" autocomplete="organization">
+      <label for="pricingUrl">Competitor pricing URL</label>
+      <input id="pricingUrl" type="url" placeholder="https://…/pricing or lab http://127.0.0.1:3847/pricing"
+             spellcheck="false" autocomplete="off">
+      <label for="intentText">Intent (optional — ranks only)</label>
+      <input id="intentText" type="text" placeholder="e.g. Pro" autocomplete="off">
+      <div class="row" style="margin-bottom:8px">
+        <button class="btn btn-primary" id="previewBtn" type="button">Preview plans</button>
+        <button class="btn btn-ghost" id="confirmBtn" type="button" disabled>Confirm watch</button>
+      </div>
+      <div id="plansBox" class="plan-list hidden"></div>
+      <p class="status" id="watchStatus"></p>
+      <p class="note">Server owns allowlist and ownership. Confirm calls <code>POST /b2b/intake/confirm</code> — watches are not invented in the browser.</p>
+    </section>
+
+    <section class="card" id="resultCard">
+      <h2>Result</h2>
+      <pre class="status" id="resultBox" style="font-family:ui-monospace,monospace;font-size:0.82rem">—</pre>
+    </section>
+  </div>
+
+  <script>
+(function () {
+  "use strict";
+
+  /**
+   * API base: empty string = same origin (fe-b2b-server reverse-proxies to Service A).
+   * Override with ?api=http://127.0.0.1:3850 to call Service A directly (CORS may apply).
+   */
+  const params = new URLSearchParams(location.search);
+  const API_BASE = (params.get("api") || "").replace(/\/$/, "");
+
+  const state = {
+    token: null,
+    user: null,
+    authMode: null, // "stub" | "google" | null
+    customerId: null,
+    preview: null,
+    selected: new Set(),
+  };
+
+  const $ = (id) => document.getElementById(id);
+
+  function setStatus(el, msg, kind) {
+    el.textContent = msg || "";
+    el.className = "status" + (kind ? " " + kind : "");
+  }
+
+  function showBanner(el, msg, kind) {
+    if (!msg) {
+      el.classList.add("hidden");
+      el.textContent = "";
+      return;
+    }
+    el.classList.remove("hidden");
+    el.className = "banner " + (kind || "info");
+    el.textContent = msg;
+  }
+
+  function formatPrice(p, currency) {
+    if (p === null || p === undefined) return "Custom";
+    const cur = currency || "USD";
+    if (cur === "USD") return "$" + p;
+    return p + " " + cur;
+  }
+
+  async function api(method, path, body, opts) {
+    const headers = { "Content-Type": "application/json", Accept: "application/json" };
+    if (state.token) headers.Authorization = "Bearer " + state.token;
+    const res = await fetch(API_BASE + path, {
+      method,
+      headers,
+      body: body !== undefined ? JSON.stringify(body) : undefined,
+    });
+    let data = null;
+    const text = await res.text();
+    try {
+      data = text ? JSON.parse(text) : null;
+    } catch {
+      data = { error: "non_json", message: text.slice(0, 200) };
+    }
+    if (!res.ok) {
+      const err = new Error(
+        (data && (data.message || data.error)) || ("HTTP " + res.status)
+      );
+      err.status = res.status;
+      err.body = data;
+      err.code = data && data.error;
+      throw err;
+    }
+    return data;
+  }
+
+  function updateAuthPanels() {
+    $("googlePanel").classList.add("hidden");
+    $("stubPanel").classList.add("hidden");
+    $("unknownPanel").classList.add("hidden");
+    if (state.authMode === "stub") {
+      $("stubPanel").classList.remove("hidden");
+      showBanner(
+        $("authModeBanner"),
+        "Service A auth_mode=stub — stub login is TEST-ONLY. Do not claim as production Google.",
+        "warn"
+      );
+    } else if (state.authMode === "google") {
+      $("googlePanel").classList.remove("hidden");
+      showBanner(
+        $("authModeBanner"),
+        "Service A auth_mode=google — pass a real Google OAuth code. Without keys/code, login fails closed (google_code_required). Live consent UI still PARKED.",
+        "info"
+      );
+    } else {
+      $("unknownPanel").classList.remove("hidden");
+      showBanner(
+        $("authModeBanner"),
+        "Service A unreachable or /health failed. Start Service A, then retry.",
+        "err"
+      );
+    }
+    if (state.user) {
+      $("userLine").textContent =
+        "Signed in as " +
+        state.user.email +
+        " (id " +
+        state.user.id +
+        ")" +
+        (state.authMode === "stub" ? " · stub session" : "");
+    } else {
+      $("userLine").textContent = "Not signed in.";
+    }
+  }
+
+  async function refreshHealth() {
+    try {
+      const data = await api("GET", "/health");
+      state.authMode = data.auth_mode || null;
+      updateAuthPanels();
+      return data;
+    } catch (e) {
+      state.authMode = null;
+      updateAuthPanels();
+      showBanner($("errorBanner"), e.message || "Health check failed", "err");
+      throw e;
+    }
+  }
+
+  function renderPlans() {
+    const box = $("plansBox");
+    if (!state.preview || !state.preview.candidates || !state.preview.candidates.length) {
+      box.classList.add("hidden");
+      box.innerHTML = "";
+      $("confirmBtn").disabled = true;
+      return;
+    }
+    box.classList.remove("hidden");
+    box.innerHTML = state.preview.candidates
+      .map(function (c) {
+        const checked = state.selected.has(c.plan_key) ? "checked" : "";
+        return (
+          '<label class="plan-row">' +
+          '<input type="checkbox" data-plan-key="' +
+          escapeAttr(c.plan_key) +
+          '" ' +
+          checked +
+          ">" +
+          '<span class="plan-name">' +
+          escapeHtml(c.name || c.plan_key) +
+          "</span>" +
+          '<span class="plan-price">' +
+          escapeHtml(formatPrice(c.price, c.currency)) +
+          "</span>" +
+          '<span class="plan-meta">' +
+          escapeHtml((c.period || "") + " · " + c.plan_key) +
+          "</span>" +
+          "</label>"
+        );
+      })
+      .join("");
+    box.querySelectorAll("input[type=checkbox]").forEach(function (cb) {
+      cb.addEventListener("change", function () {
+        const key = cb.getAttribute("data-plan-key");
+        if (cb.checked) state.selected.add(key);
+        else state.selected.delete(key);
+        $("confirmBtn").disabled = state.selected.size === 0 || !state.token;
+      });
+    });
+    $("confirmBtn").disabled = state.selected.size === 0 || !state.token;
+  }
+
+  function escapeHtml(s) {
+    return String(s)
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;");
+  }
+  function escapeAttr(s) {
+    return escapeHtml(s).replace(/'/g, "&#39;");
+  }
+
+  async function ensureCustomer() {
+    if (state.customerId) return state.customerId;
+    if (!state.token || !state.user) {
+      const err = new Error("Authentication required — sign in first");
+      err.code = "auth_required";
+      err.status = 401;
+      throw err;
+    }
+    const name = ($("customerName").value || "Pilot").trim();
+    const email = state.user.email || state.user.notify_email;
+    const cust = await api("POST", "/customers", { name: name, email: email });
+    state.customerId = cust.id;
+    return state.customerId;
+  }
+
+  async function doLogin(body) {
+    showBanner($("errorBanner"), "", "err");
+    setStatus($("loginStatus"), "Signing in…");
+    try {
+      const data = await api("POST", "/auth/login", body);
+      if (!data.token || !data.user) {
+        throw Object.assign(new Error("Login response missing token/user"), {
+          code: "auth_failed",
+        });
+      }
+      // Never pretend Google succeeded without a code when not in stub:
+      if (state.authMode === "google" && !body.code) {
+        throw Object.assign(new Error("google_code_required"), {
+          code: "google_code_required",
+          status: 400,
+        });
+      }
+      state.token = data.token;
+      state.user = data.user;
+      state.customerId = null;
+      updateAuthPanels();
+      setStatus($("loginStatus"), "Signed in.", "ok");
+      $("resultBox").textContent = JSON.stringify(
+        { user: data.user, notify_hint: "same-email path verifies on login" },
+        null,
+        2
+      );
+    } catch (e) {
+      state.token = null;
+      state.user = null;
+      updateAuthPanels();
+      const code = (e.body && e.body.error) || e.code || "auth_failed";
+      const msg =
+        (e.body && (e.body.message || e.body.error)) || e.message || "Login failed";
+      setStatus($("loginStatus"), code + ": " + msg, "err");
+      showBanner($("errorBanner"), code + " — " + msg, "err");
+      if (code === "google_code_required" || code === "stub_credentials_required") {
+        showBanner(
+          $("authModeBanner"),
+          code === "google_code_required"
+            ? "Fail-closed: Google authorization code required. Live Google consent UI is PARKED."
+            : "Stub login needs google_subject + email (AUTH_STUB test-only).",
+          "err"
+        );
+      }
+    }
+  }
+
+  $("googleLoginBtn").addEventListener("click", function () {
+    const code = $("googleCode").value.trim();
+    if (!code) {
+      setStatus(
+        $("loginStatus"),
+        "google_code_required: paste a real Google authorization code (or unlock Wave 6 Phase B).",
+        "err"
+      );
+      showBanner(
+        $("errorBanner"),
+        "google_code_required — UI will not pretend Google succeeded without a code.",
+        "err"
+      );
+      return;
+    }
+    doLogin({ code: code });
+  });
+
+  $("stubLoginBtn").addEventListener("click", function () {
+    doLogin({
+      google_subject: $("stubSubject").value.trim(),
+      email: $("stubEmail").value.trim(),
+    });
+  });
+
+  $("retryHealthBtn").addEventListener("click", function () {
+    refreshHealth().catch(function () {});
+  });
+
+  $("previewBtn").addEventListener("click", async function () {
+    showBanner($("errorBanner"), "", "err");
+    const url = $("pricingUrl").value.trim();
+    if (!url) {
+      setStatus($("watchStatus"), "url is required", "err");
+      return;
+    }
+    setStatus($("watchStatus"), "Previewing…");
+    $("previewBtn").disabled = true;
+    try {
+      const intent = $("intentText").value.trim();
+      const body = { url: url };
+      if (intent) body.intent_text = intent;
+      const data = await api("POST", "/b2b/intake/preview", body);
+      state.preview = data;
+      state.selected = new Set();
+      if (data.candidates && data.candidates[0]) {
+        state.selected.add(data.candidates[0].plan_key);
+      }
+      renderPlans();
+      setStatus(
+        $("watchStatus"),
+        "Found " +
+          (data.candidates || []).length +
+          " plan(s) on " +
+          (data.site || "site") +
+          ". Select and confirm.",
+        "ok"
+      );
+      $("resultBox").textContent = JSON.stringify(data, null, 2);
+    } catch (e) {
+      state.preview = null;
+      renderPlans();
+      const code = (e.body && e.body.error) || e.code || "preview_failed";
+      setStatus($("watchStatus"), code + ": " + (e.message || ""), "err");
+      showBanner($("errorBanner"), code + " — " + (e.message || ""), "err");
+    } finally {
+      $("previewBtn").disabled = false;
+    }
+  });
+
+  $("confirmBtn").addEventListener("click", async function () {
+    showBanner($("errorBanner"), "", "err");
+    if (!state.token) {
+      setStatus($("watchStatus"), "Authentication required — sign in first", "err");
+      showBanner($("errorBanner"), "Authentication required — sign in before confirm.", "err");
+      return;
+    }
+    if (!state.preview || state.selected.size === 0) {
+      setStatus($("watchStatus"), "Select at least one plan from preview", "warn");
+      return;
+    }
+    setStatus($("watchStatus"), "Confirming watch…");
+    $("confirmBtn").disabled = true;
+    try {
+      const customerId = await ensureCustomer();
+      const selected = Array.from(state.selected).map(function (k) {
+        return { plan_key: k };
+      });
+      const data = await api("POST", "/b2b/intake/confirm", {
+        url: state.preview.url,
+        selected: selected,
+        customer_id: customerId,
+      });
+      setStatus(
+        $("watchStatus"),
+        "Watch created (" +
+          (data.watch_targets || []).length +
+          " target(s)). first_learn=" +
+          data.first_learn,
+        "ok"
+      );
+      $("resultBox").textContent = JSON.stringify(data, null, 2);
+    } catch (e) {
+      const code = (e.body && e.body.error) || e.code || "confirm_failed";
+      const reason = e.body && e.body.reason;
+      let msg = e.message || "";
+      if (e.status === 401 || code === "auth_required") {
+        msg = "Authentication required";
+      }
+      if (reason === "notify_email_unverified") {
+        msg = "Notify email must be verified before creating watches";
+      }
+      setStatus($("watchStatus"), code + (reason ? " (" + reason + ")" : "") + ": " + msg, "err");
+      showBanner($("errorBanner"), msg, "err");
+    } finally {
+      $("confirmBtn").disabled = state.selected.size === 0 || !state.token;
+    }
+  });
+
+  refreshHealth().catch(function () {});
+})();
+  </script>
+</body>
+</html>
