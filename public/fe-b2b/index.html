@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>PriceWatch — B2B (thin)</title>
+  <title>PriceWatch</title>
   <link rel="stylesheet" href="/fe-shared/theme.css">
   <style>
     :root { --accent: #4c6ef5; --accent-2: #3b5bdb; }
@@ -19,6 +19,58 @@
     .plan-name { font-weight: 650; min-width: 90px; }
     .plan-price { color: var(--accent-2); font-weight: 700; min-width: 70px; }
     .plan-meta { color: var(--dim); font-size: 0.85rem; flex: 1; }
+    .honesty-chip {
+      display: inline-flex; align-items: center;
+      background: #fff9db; color: #5c4b00;
+      border: 1px solid #ffe066; border-radius: 999px;
+      padding: 5px 12px; font-size: 0.78rem; font-weight: 650;
+      margin: 0 0 14px;
+    }
+    .checkout-plan {
+      background: var(--row-bg); border: 1px solid var(--row-border);
+      border-radius: 12px; padding: 16px; margin-bottom: 14px;
+    }
+    .checkout-plan h3 { font-size: 1.1rem; margin-bottom: 4px; }
+    .checkout-price { font-size: 1.35rem; font-weight: 700; color: var(--accent-2); }
+    .checkout-meta { color: var(--dim); font-size: 0.85rem; margin-top: 4px; }
+    .watch-product {
+      background: var(--row-bg); border: 1px solid var(--row-border);
+      border-radius: 12px; padding: 16px;
+    }
+    .watch-product h3 { font-size: 1.05rem; margin-bottom: 4px; }
+    .watch-url {
+      color: var(--dim); font-size: 0.82rem; word-break: break-all;
+      margin-bottom: 12px;
+    }
+    .baseline-plans {
+      display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 14px;
+    }
+    .baseline-pill {
+      background: var(--chip-bg); color: var(--chip-text);
+      border-radius: 8px; padding: 6px 10px; font-size: 0.85rem; font-weight: 600;
+    }
+    .wait-meta {
+      display: flex; flex-direction: column; gap: 6px;
+      font-size: 0.9rem; color: var(--muted); margin-bottom: 4px;
+    }
+    .wait-meta strong { color: var(--text); font-weight: 650; }
+    .quiet-badge {
+      display: inline-flex; align-items: center; gap: 6px;
+      background: var(--banner-ok-bg); color: var(--banner-ok-text);
+      border: 1px solid var(--banner-ok-border); border-radius: 999px;
+      padding: 4px 10px; font-size: 0.8rem; font-weight: 650;
+      margin-bottom: 10px;
+    }
+    .locked-note { color: var(--dim); font-size: 0.88rem; margin-top: 4px; }
+    details.debug-details { margin-top: 12px; }
+    details.debug-details summary {
+      cursor: pointer; font-size: 0.78rem; color: var(--dim);
+    }
+    details.debug-details pre {
+      margin-top: 8px; font-family: ui-monospace, monospace;
+      font-size: 0.78rem; color: var(--muted); white-space: pre-wrap;
+      max-height: 180px; overflow: auto;
+    }
   </style>
 </head>
 <body>
@@ -26,17 +78,17 @@
     <div class="brand">
       <div class="mark">P</div>
       <div>
-        <h1>PriceWatch <span class="chip">B2B thin</span></h1>
+        <h1>PriceWatch</h1>
       </div>
     </div>
-    <p class="tag">Login → paste competitor URL → preview plans → confirm watch. Talks to Service A only.</p>
+    <p class="tag">Competitor pricing watches with email alerts when plans or prices move.</p>
 
-    <div id="authModeBanner" class="banner info" role="status">Checking Service A…</div>
+    <div id="authModeBanner" class="banner info hidden" role="status"></div>
     <div id="errorBanner" class="banner err hidden" role="alert"></div>
 
-    <!-- Login -->
+    <!-- Sign in -->
     <section class="card" id="loginCard">
-      <h2>1 · Login</h2>
+      <h2>Sign in</h2>
       <p class="user-line" id="userLine">Not signed in.</p>
 
       <div id="googlePanel" class="hidden">
@@ -44,7 +96,8 @@
           <button class="btn btn-primary" id="gisSignInBtn" type="button" disabled>Sign in with Google</button>
         </div>
         <p id="gisStatus" class="status"></p>
-        <details id="devCodeDetails" style="margin-top: 12px;">
+        <!-- Dev paste-code kept in DOM for local shame; hidden entirely when auth_mode=google -->
+        <details id="devCodeDetails" class="hidden" style="margin-top: 12px;">
           <summary style="cursor:pointer; font-size: 0.82rem; color: var(--dim);">Dev only: paste authorization code</summary>
           <div style="margin-top: 8px;">
             <label for="googleCode">Google authorization code</label>
@@ -74,35 +127,74 @@
       </div>
 
       <div id="unknownPanel" class="hidden">
-        <p class="note">Could not determine auth mode. Is Service A running?</p>
-        <button class="btn btn-ghost" id="retryHealthBtn" type="button">Retry health</button>
+        <p class="note">Could not reach the sign-in service. Check your connection, then retry.</p>
+        <button class="btn btn-ghost" id="retryHealthBtn" type="button">Retry</button>
       </div>
 
       <p class="status" id="loginStatus"></p>
     </section>
 
-    <!-- Add watch -->
-    <section class="card" id="watchCard">
-      <h2>2 · Add watch</h2>
-      <label for="customerName">Customer name</label>
-      <input id="customerName" type="text" value="Pilot" autocomplete="organization">
-      <label for="pricingUrl">Competitor pricing URL</label>
-      <input id="pricingUrl" type="url" placeholder="https://…/pricing or lab http://127.0.0.1:3847/pricing"
-             spellcheck="false" autocomplete="off">
-      <label for="intentText">Intent (optional — ranks only)</label>
-      <input id="intentText" type="text" placeholder="e.g. Pro" autocomplete="off">
-      <div class="row" style="margin-bottom:8px">
-        <button class="btn btn-primary" id="previewBtn" type="button">Preview plans</button>
-        <button class="btn btn-ghost" id="confirmBtn" type="button" disabled>Confirm watch</button>
+    <!-- Checkout stub (S3) — client-side only; unlocks Add watch -->
+    <section class="card" id="checkoutCard">
+      <h2>Start pilot</h2>
+      <div class="honesty-chip" id="honestyChip">Demo / pilot checkout — not a live charge</div>
+      <div id="checkoutForm">
+        <div class="checkout-plan">
+          <h3>Pilot</h3>
+          <div class="checkout-price">$49<span style="font-size:0.85rem;font-weight:600;color:var(--muted)">/mo</span></div>
+          <p class="checkout-meta">Competitor pricing watches · daily checks · email alerts</p>
+        </div>
+        <button class="btn btn-primary" id="startPilotBtn" type="button" disabled>Start pilot</button>
+        <p class="locked-note" id="checkoutLockedNote">Sign in to start your pilot.</p>
+        <p class="status" id="checkoutStatus"></p>
       </div>
-      <div id="plansBox" class="plan-list hidden"></div>
-      <p class="status" id="watchStatus"></p>
-      <p class="note">Server owns allowlist and ownership. Confirm calls <code>POST /b2b/intake/confirm</code> — watches are not invented in the browser.</p>
+      <div id="checkoutSuccess" class="hidden">
+        <div class="banner ok" role="status">You're in — Pilot started.</div>
+        <p class="note" style="margin-top:8px">Pilot active. Add a competitor pricing page below.</p>
+      </div>
     </section>
 
-    <section class="card" id="resultCard">
-      <h2>Result</h2>
-      <pre class="status" id="resultBox" style="font-family:ui-monospace,monospace;font-size:0.82rem">—</pre>
+    <!-- Add watch -->
+    <section class="card" id="watchCard">
+      <h2>Add watch</h2>
+      <div id="watchLocked" class="locked-note">Start your pilot to add a competitor watch.</div>
+      <div id="watchForm" class="hidden">
+        <label for="rivalName">Competitor name</label>
+        <input id="rivalName" type="text" placeholder="e.g. Linear" autocomplete="organization">
+        <label for="pricingUrl">Competitor pricing URL</label>
+        <input id="pricingUrl" type="url" placeholder="https://…/pricing"
+               spellcheck="false" autocomplete="off">
+        <label for="intentText">Focus plan (optional)</label>
+        <input id="intentText" type="text" placeholder="e.g. Pro" autocomplete="off">
+        <!-- customerName kept for API POST /customers; not shown as lab "Customer name" -->
+        <input id="customerName" type="hidden" value="Pilot">
+        <div class="row" style="margin-bottom:8px">
+          <button class="btn btn-primary" id="previewBtn" type="button">Preview plans</button>
+          <button class="btn btn-ghost" id="confirmBtn" type="button" disabled>Confirm watch</button>
+        </div>
+        <div id="plansBox" class="plan-list hidden"></div>
+        <p class="status" id="watchStatus"></p>
+        <!-- Server owns allowlist and ownership. Watches are not invented in the browser. -->
+      </div>
+    </section>
+
+    <!-- Watch product card + Waiting Option B (S5/S6) -->
+    <section class="card hidden" id="resultCard">
+      <h2>Your watch</h2>
+      <div id="watchProduct" class="watch-product">
+        <h3 id="watchRivalName">—</h3>
+        <p class="watch-url" id="watchRivalUrl">—</p>
+        <div class="quiet-badge" id="quietBadge">No price change</div>
+        <div class="baseline-plans" id="baselinePlans"></div>
+        <div class="wait-meta">
+          <div><strong>Last checked</strong> · <span id="lastChecked">—</span></div>
+          <div><strong>Cadence</strong> · Daily · morning Israel time</div>
+        </div>
+      </div>
+      <details class="debug-details" id="debugDetails">
+        <summary>Debug details</summary>
+        <pre id="resultBox">—</pre>
+      </details>
     </section>
   </div>
 
@@ -112,10 +204,11 @@
 
   /**
    * API base: empty string = same origin (happy path).
-   * Hosted on Service A at /fe-b2b/: fetch("/health"), "/auth", "/b2b", "/customers"
+   * Hosted at /fe-b2b/: fetch("/health"), "/auth", "/b2b", "/customers"
    * hit the same host — no ?api= required.
    * Local npm run fe-b2b: reverse-proxy makes same-origin work the same way.
    * Optional override: ?api=http://127.0.0.1:3850 (direct; CORS may apply).
+   * Routes used: /auth/login, /b2b/intake/preview, /b2b/intake/confirm, /customers
    */
   const params = new URLSearchParams(location.search);
   const API_BASE = (params.get("api") || "").replace(/\/$/, "");
@@ -128,6 +221,8 @@
     customerId: null,
     preview: null,
     selected: new Set(),
+    pilotStarted: false,
+    lastConfirm: null,
   };
 
   const $ = (id) => document.getElementById(id);
@@ -153,6 +248,18 @@
     const cur = currency || "USD";
     if (cur === "USD") return "$" + p;
     return p + " " + cur;
+  }
+
+  function formatCheckedAt(d) {
+    try {
+      return new Intl.DateTimeFormat("en-GB", {
+        timeZone: "Asia/Jerusalem",
+        dateStyle: "medium",
+        timeStyle: "short",
+      }).format(d) + " (Israel)";
+    } catch {
+      return d.toISOString();
+    }
   }
 
   async function api(method, path, body, opts) {
@@ -182,29 +289,58 @@
     return data;
   }
 
+  function updateJourneyGates() {
+    const signedIn = !!(state.token && state.user);
+    $("startPilotBtn").disabled = !signedIn || state.pilotStarted;
+    if (!signedIn) {
+      $("checkoutLockedNote").textContent = "Sign in to start your pilot.";
+      $("checkoutLockedNote").classList.remove("hidden");
+    } else if (!state.pilotStarted) {
+      $("checkoutLockedNote").textContent = "";
+      $("checkoutLockedNote").classList.add("hidden");
+    } else {
+      $("checkoutLockedNote").classList.add("hidden");
+    }
+
+    if (state.pilotStarted) {
+      $("checkoutForm").classList.add("hidden");
+      $("checkoutSuccess").classList.remove("hidden");
+      $("watchLocked").classList.add("hidden");
+      $("watchForm").classList.remove("hidden");
+    } else {
+      $("checkoutForm").classList.remove("hidden");
+      $("checkoutSuccess").classList.add("hidden");
+      $("watchLocked").classList.remove("hidden");
+      $("watchForm").classList.add("hidden");
+    }
+  }
+
   function updateAuthPanels() {
     $("googlePanel").classList.add("hidden");
     $("stubPanel").classList.add("hidden");
     $("unknownPanel").classList.add("hidden");
+    $("devCodeDetails").classList.add("hidden");
+
     if (state.authMode === "stub") {
       $("stubPanel").classList.remove("hidden");
       showBanner(
         $("authModeBanner"),
-        "Service A auth_mode=stub — stub login is TEST-ONLY. Do not claim as production Google.",
+        "AUTH_STUB — test / local shame only. Do not claim as production Google.",
         "warn"
       );
     } else if (state.authMode === "google") {
       $("googlePanel").classList.remove("hidden");
-      if (state.googleClientId) {
-        showBanner(
-          $("authModeBanner"),
-          "Service A auth_mode=google — use the Sign in with Google button below.",
-          "info"
-        );
+      // Prefer hide Dev paste-code on google camera path
+      $("devCodeDetails").classList.add("hidden");
+      if (state.user) {
+        showBanner($("authModeBanner"), "", "info");
+      } else if (state.googleClientId) {
+        // Soft happy-path banner — no Service A / API jargon
+        showBanner($("authModeBanner"), "", "info");
       } else {
         showBanner(
           $("authModeBanner"),
-          "Service A auth_mode=google — Google client ID not configured. Sign-in unavailable (google_code_required). Contact admin.",
+          "Google sign-in is not configured (google_code_required). Contact admin.",
           "err"
         );
       }
@@ -212,21 +348,19 @@
       $("unknownPanel").classList.remove("hidden");
       showBanner(
         $("authModeBanner"),
-        "Service A unreachable or /health failed. Start Service A, then retry.",
+        "Sign-in unavailable right now. Retry in a moment.",
         "err"
       );
     }
+
     if (state.user) {
+      var email = state.user.email || state.user.notify_email || "signed-in user";
       $("userLine").textContent =
-        "Signed in as " +
-        state.user.email +
-        " (id " +
-        state.user.id +
-        ")" +
-        (state.authMode === "stub" ? " · stub session" : "");
+        "Signed in as " + email + (state.authMode === "stub" ? " · stub session (test-only)" : "");
     } else {
       $("userLine").textContent = "Not signed in.";
     }
+    updateJourneyGates();
   }
 
   async function refreshHealth() {
@@ -243,7 +377,7 @@
       state.authMode = null;
       state.googleClientId = null;
       updateAuthPanels();
-      showBanner($("errorBanner"), e.message || "Health check failed", "err");
+      showBanner($("errorBanner"), e.message || "Could not reach sign-in", "err");
       throw e;
     }
   }
@@ -253,7 +387,6 @@
   function initGisButton() {
     if (_gisClient) return;
     var btn = $("gisSignInBtn");
-    var wrap = $("gisButtonWrap");
     var statusEl = $("gisStatus");
 
     function onGisLoaded() {
@@ -303,7 +436,7 @@
       script.defer = true;
       script.onload = onGisLoaded;
       script.onerror = function () {
-        statusEl.textContent = "Failed to load Google Sign-In. Check network or ad-blockers. Use dev paste-code below as fallback.";
+        statusEl.textContent = "Failed to load Google Sign-In. Check network or ad-blockers.";
         statusEl.className = "status err";
       };
       document.head.appendChild(script);
@@ -336,7 +469,7 @@
           escapeHtml(formatPrice(c.price, c.currency)) +
           "</span>" +
           '<span class="plan-meta">' +
-          escapeHtml((c.period || "") + " · " + c.plan_key) +
+          escapeHtml(c.period || "") +
           "</span>" +
           "</label>"
         );
@@ -347,10 +480,10 @@
         const key = cb.getAttribute("data-plan-key");
         if (cb.checked) state.selected.add(key);
         else state.selected.delete(key);
-        $("confirmBtn").disabled = state.selected.size === 0 || !state.token;
+        $("confirmBtn").disabled = state.selected.size === 0 || !state.token || !state.pilotStarted;
       });
     });
-    $("confirmBtn").disabled = state.selected.size === 0 || !state.token;
+    $("confirmBtn").disabled = state.selected.size === 0 || !state.token || !state.pilotStarted;
   }
 
   function escapeHtml(s) {
@@ -364,6 +497,63 @@
     return escapeHtml(s).replace(/'/g, "&#39;");
   }
 
+  function rivalLabelFromUrl(url) {
+    try {
+      var host = new URL(url).hostname.replace(/^www\./, "");
+      var base = host.split(".")[0] || host;
+      return base.charAt(0).toUpperCase() + base.slice(1);
+    } catch {
+      return "Competitor";
+    }
+  }
+
+  function renderWatchCard(opts) {
+    opts = opts || {};
+    var name =
+      ($("rivalName").value || "").trim() ||
+      opts.rivalName ||
+      (state.preview && rivalLabelFromUrl(state.preview.url)) ||
+      "Competitor";
+    var url =
+      (state.preview && state.preview.url) ||
+      ($("pricingUrl").value || "").trim() ||
+      opts.url ||
+      "—";
+    $("watchRivalName").textContent = name;
+    $("watchRivalUrl").textContent = url;
+
+    var candidates =
+      (state.preview && state.preview.candidates) || opts.candidates || [];
+    var selectedKeys = state.selected && state.selected.size
+      ? Array.from(state.selected)
+      : candidates.map(function (c) { return c.plan_key; });
+    var shown = candidates.filter(function (c) {
+      return selectedKeys.indexOf(c.plan_key) !== -1;
+    });
+    if (!shown.length) shown = candidates;
+
+    var box = $("baselinePlans");
+    if (shown.length) {
+      box.innerHTML = shown
+        .map(function (c) {
+          return (
+            '<span class="baseline-pill">' +
+            escapeHtml(c.name || c.plan_key) +
+            " · " +
+            escapeHtml(formatPrice(c.price, c.currency)) +
+            "</span>"
+          );
+        })
+        .join("");
+    } else {
+      box.innerHTML = '<span class="baseline-pill">Plans from preview</span>';
+    }
+
+    $("quietBadge").textContent = "No price change";
+    $("lastChecked").textContent = formatCheckedAt(opts.checkedAt || new Date());
+    $("resultCard").classList.remove("hidden");
+  }
+
   async function ensureCustomer() {
     if (state.customerId) return state.customerId;
     if (!state.token || !state.user) {
@@ -372,7 +562,9 @@
       err.status = 401;
       throw err;
     }
-    const name = ($("customerName").value || "Pilot").trim();
+    const rival = ($("rivalName").value || "").trim();
+    const name = rival || ($("customerName").value || "Pilot").trim();
+    $("customerName").value = name;
     const email = state.user.email || state.user.notify_email;
     const cust = await api("POST", "/customers", { name: name, email: email });
     state.customerId = cust.id;
@@ -402,7 +594,7 @@
       updateAuthPanels();
       setStatus($("loginStatus"), "Signed in.", "ok");
       $("resultBox").textContent = JSON.stringify(
-        { user: data.user, notify_hint: "same-email path verifies on login" },
+        { user: { email: data.user.email, id: data.user.id }, notify_hint: "alerts go to this email" },
         null,
         2
       );
@@ -419,13 +611,24 @@
         showBanner(
           $("authModeBanner"),
           code === "google_code_required"
-            ? "Fail-closed: Google authorization code required. Use the Sign in with Google button or check GIS configuration."
+            ? "Fail-closed: Google authorization code required. Use Sign in with Google."
             : "Stub login needs google_subject + email (AUTH_STUB test-only).",
           "err"
         );
       }
     }
   }
+
+  $("startPilotBtn").addEventListener("click", function () {
+    if (!state.token || !state.user) {
+      setStatus($("checkoutStatus"), "Sign in first", "err");
+      return;
+    }
+    // Client-side honest stub only — not a live charge
+    state.pilotStarted = true;
+    setStatus($("checkoutStatus"), "Pilot started.", "ok");
+    updateJourneyGates();
+  });
 
   $("googleLoginBtn").addEventListener("click", function () {
     const code = $("googleCode").value.trim();
@@ -458,12 +661,16 @@
 
   $("previewBtn").addEventListener("click", async function () {
     showBanner($("errorBanner"), "", "err");
-    const url = $("pricingUrl").value.trim();
-    if (!url) {
-      setStatus($("watchStatus"), "url is required", "err");
+    if (!state.pilotStarted) {
+      setStatus($("watchStatus"), "Start your pilot first", "warn");
       return;
     }
-    setStatus($("watchStatus"), "Previewing…");
+    const url = $("pricingUrl").value.trim();
+    if (!url) {
+      setStatus($("watchStatus"), "Pricing URL is required", "err");
+      return;
+    }
+    setStatus($("watchStatus"), "Reading plans…");
     $("previewBtn").disabled = true;
     try {
       const intent = $("intentText").value.trim();
@@ -475,14 +682,15 @@
       if (data.candidates && data.candidates[0]) {
         state.selected.add(data.candidates[0].plan_key);
       }
+      if (!($("rivalName").value || "").trim()) {
+        $("rivalName").value = rivalLabelFromUrl(data.url || url);
+      }
       renderPlans();
       setStatus(
         $("watchStatus"),
         "Found " +
           (data.candidates || []).length +
-          " plan(s) on " +
-          (data.site || "site") +
-          ". Select and confirm.",
+          " plan(s). Select and confirm.",
         "ok"
       );
       $("resultBox").textContent = JSON.stringify(data, null, 2);
@@ -504,11 +712,15 @@
       showBanner($("errorBanner"), "Authentication required — sign in before confirm.", "err");
       return;
     }
+    if (!state.pilotStarted) {
+      setStatus($("watchStatus"), "Start your pilot first", "warn");
+      return;
+    }
     if (!state.preview || state.selected.size === 0) {
       setStatus($("watchStatus"), "Select at least one plan from preview", "warn");
       return;
     }
-    setStatus($("watchStatus"), "Confirming watch…");
+    setStatus($("watchStatus"), "Saving watch…");
     $("confirmBtn").disabled = true;
     try {
       const customerId = await ensureCustomer();
@@ -520,15 +732,16 @@
         selected: selected,
         customer_id: customerId,
       });
+      state.lastConfirm = data;
       setStatus(
         $("watchStatus"),
-        "Watch created (" +
-          (data.watch_targets || []).length +
-          " target(s)). first_learn=" +
-          data.first_learn,
+        "Watching " +
+          (($("rivalName").value || "").trim() || rivalLabelFromUrl(state.preview.url)) +
+          ".",
         "ok"
       );
       $("resultBox").textContent = JSON.stringify(data, null, 2);
+      renderWatchCard({ checkedAt: new Date() });
     } catch (e) {
       const code = (e.body && e.body.error) || e.code || "confirm_failed";
       const reason = e.body && e.body.reason;
@@ -542,10 +755,11 @@
       setStatus($("watchStatus"), code + (reason ? " (" + reason + ")" : "") + ": " + msg, "err");
       showBanner($("errorBanner"), msg, "err");
     } finally {
-      $("confirmBtn").disabled = state.selected.size === 0 || !state.token;
+      $("confirmBtn").disabled = state.selected.size === 0 || !state.token || !state.pilotStarted;
     }
   });
 
+  updateJourneyGates();
   refreshHealth().catch(function () {});
 })();
   </script>
