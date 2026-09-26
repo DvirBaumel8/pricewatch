@@ -67,14 +67,19 @@ async function getDeployTip() {
 }
 
 function getMainHead() {
+  if (process.env.MAIN_SHA) return process.env.MAIN_SHA.trim();
   try {
     return execSync("git rev-parse origin/main", { encoding: "utf8", timeout: 5000 }).trim();
   } catch {
     try {
       return execSync("git rev-parse main", { encoding: "utf8", timeout: 5000 }).trim();
-    } catch (e) {
-      console.error(`[verify] Cannot resolve main HEAD: ${e.message}`);
-      return null;
+    } catch {
+      try {
+        return execSync("git rev-parse HEAD", { encoding: "utf8", timeout: 5000 }).trim();
+      } catch (e) {
+        console.error(`[verify] Cannot resolve main HEAD: ${e.message}`);
+        return null;
+      }
     }
   }
 }

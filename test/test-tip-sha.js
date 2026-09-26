@@ -86,9 +86,9 @@ test("(b) /health response includes git_sha field", async () => {
 });
 
 test("(c) verify script exits 0 on matching STUB_TIP_SHA", () => {
-  const mainHead = execSync("git rev-parse HEAD", { encoding: "utf8" }).trim();
+  const headSha = execSync("git rev-parse HEAD", { encoding: "utf8" }).trim();
   try {
-    execSync(`STUB_TIP_SHA=${mainHead} node scripts/verify-tip-sha.js`, {
+    execSync(`STUB_TIP_SHA=${headSha} MAIN_SHA=${headSha} node scripts/verify-tip-sha.js`, {
       encoding: "utf8",
       stdio: "pipe",
     });
@@ -98,9 +98,10 @@ test("(c) verify script exits 0 on matching STUB_TIP_SHA", () => {
 });
 
 test("(d) verify script exits 1 on mismatched STUB_TIP_SHA", () => {
+  const headSha = execSync("git rev-parse HEAD", { encoding: "utf8" }).trim();
   const fakeHash = "0000000000000000000000000000000000000000";
   try {
-    execSync(`STUB_TIP_SHA=${fakeHash} node scripts/verify-tip-sha.js`, {
+    execSync(`STUB_TIP_SHA=${fakeHash} MAIN_SHA=${headSha} node scripts/verify-tip-sha.js`, {
       encoding: "utf8",
       stdio: "pipe",
     });

@@ -45,7 +45,8 @@ Exit codes: `0` match, `1` mismatch, `2` could not resolve a SHA.
 
 ### 2. Stub mode (CI / offline / shame-test)
 
-No network needed — pass a fake (or real) SHA via `STUB_TIP_SHA`:
+No network needed — pass a fake (or real) SHA via `STUB_TIP_SHA`.
+If `origin/main` is unavailable (e.g. shallow CI clone), also set `MAIN_SHA`:
 
 ```bash
 # Simulate a matching deploy
@@ -53,6 +54,9 @@ STUB_TIP_SHA=$(git rev-parse HEAD) npm run verify:tip-sha
 
 # Simulate a stale deploy
 STUB_TIP_SHA=0000000000000000000000000000000000000000 npm run verify:tip-sha
+
+# CI (shallow clone — no origin/main ref)
+STUB_TIP_SHA=$(git rev-parse HEAD) MAIN_SHA=$(git rev-parse HEAD) npm run verify:tip-sha
 ```
 
 ### 3. Manual cURL check (no script)
