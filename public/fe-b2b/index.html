@@ -123,6 +123,21 @@
     .app-user {
       color: var(--muted); font-size: 0.88rem;
     }
+    /* Wave 15 — multi-watch list */
+    .watches-list {
+      display: flex; flex-direction: column; gap: 12px;
+    }
+    .watches-list .watch-product { margin: 0; }
+    .watches-empty {
+      color: var(--dim); font-size: 0.9rem; margin: 0 0 4px;
+    }
+    .watch-cap-msg {
+      margin-top: 12px; padding: 10px 12px;
+      background: #fff9db; color: #5c4b00;
+      border: 1px solid #ffe066; border-radius: 10px;
+      font-size: 0.88rem; font-weight: 600;
+    }
+    .watch-cap-msg.hidden { display: none; }
   </style>
 </head>
 <body>
@@ -299,18 +314,13 @@
         </div>
       </section>
 
-      <!-- Watch product card + Waiting Option B (S5/S6) -->
+      <!-- Wave 15 — Your watches list (one Option B card per rival) -->
       <section class="card hidden" id="resultCard">
-        <h2>Your watch</h2>
-        <div id="watchProduct" class="watch-product">
-          <h3 id="watchRivalName">—</h3>
-          <p class="watch-url" id="watchRivalUrl">—</p>
-          <div class="quiet-badge" id="quietBadge">No price change</div>
-          <div class="baseline-plans" id="baselinePlans"></div>
-          <div class="wait-meta">
-            <div><strong>Last checked</strong> · <span id="lastChecked">—</span></div>
-            <div><strong>Cadence</strong> · Daily · morning Israel time</div>
-          </div>
+        <h2>Your watches</h2>
+        <p class="watches-empty" id="watchesEmpty">No watches yet. Add a competitor above.</p>
+        <div id="watchesList" class="watches-list" aria-live="polite"></div>
+        <div class="watch-cap-msg hidden" id="watchCapMsg" role="status">
+          You're full — soft limit of 5 watches for this pilot. Existing watches keep running; remove one later to add another.
         </div>
         <details class="debug-details" id="debugDetails">
           <summary>Debug details</summary>
@@ -328,16 +338,23 @@
    * Wave 14 routes (same page, view swap):
    *   /fe-b2b/  signed-out → #landingView (marketing + Continue with Google)
    *   /fe-b2b/  signed-in  → #appView (Wave 13 product: checkout → add watch → Option B)
+   * Wave 15: multi-competitor "Your watches" list + persistent Add + soft UI cap.
    *
    * API base: empty string = same origin (happy path).
    * Hosted at /fe-b2b/: fetch("/health"), "/auth", "/b2b", "/customers"
    * hit the same host — no ?api= required.
    * Local npm run fe-b2b: reverse-proxy makes same-origin work the same way.
    * Optional override: ?api=http://127.0.0.1:3850 (direct; CORS may apply).
-   * Routes used: /auth/login, /b2b/intake/preview, /b2b/intake/confirm, /customers
+   * Routes used: /auth/login, /b2b/intake/preview, /b2b/intake/confirm,
+   *   /customers, GET /customers/:id/watch-targets (reload list)
    */
   const params = new URLSearchParams(location.search);
   const API_BASE = (params.get("api") || "").replace(/\/$/, "");
+
+  /** Demo-ready soft UI cap (~Tierpeek Starter 3 / Visualping free 5). Backend soft-cap stays 50 — FE does not product-cap at a single rival. */
+  const FE_WATCH_SOFT_CAP = 5;
+
+  const SESSION_KEY = "pw_fe_b2b_session_v15";
 
   const state = {
     token: null,
@@ -349,6 +366,8 @@
     selected: new Set(),
     pilotStarted: false,
     lastConfirm: null,
+    /** One entry per rival URL — Option B cards under Your watches. Not invented client-side; filled from confirm + Service A list. */
+    watches: [],
   };
 
   const $ = (id) => document.getElementById(id);
@@ -445,12 +464,17 @@
       $("checkoutSuccess").classList.remove("hidden");
       $("watchLocked").classList.add("hidden");
       $("watchForm").classList.remove("hidden");
+      $("resultCard").classList.remove("hidden");
     } else {
       $("checkoutForm").classList.remove("hidden");
       $("checkoutSuccess").classList.add("hidden");
       $("watchLocked").classList.remove("hidden");
       $("watchForm").classList.add("hidden");
+      if (!state.watches.length) $("resultCard").classList.add("hidden");
+      else $("resultCard").classList.remove("hidden");
     }
+    renderWatchesList();
+    updateSoftCapUi();
   }
 
   function updateAuthPanels() {
@@ -649,23 +673,128 @@
     }
   }
 
-  function renderWatchCard(opts) {
-    opts = opts || {};
-    var name =
-      ($("rivalName").value || "").trim() ||
-      opts.rivalName ||
-      (state.preview && rivalLabelFromUrl(state.preview.url)) ||
-      "Competitor";
-    var url =
-      (state.preview && state.preview.url) ||
-      ($("pricingUrl").value || "").trim() ||
-      opts.url ||
-      "—";
-    $("watchRivalName").textContent = name;
-    $("watchRivalUrl").textContent = url;
+  function normalizeWatchUrl(url) {
+    try {
+      var u = new URL(String(url).trim());
+      u.hash = "";
+      var path = u.pathname.replace(/\/$/, "") || "/";
+      return (u.origin + path + u.search).toLowerCase();
+    } catch {
+      return String(url || "").trim().toLowerCase();
+    }
+  }
 
+  function persistSession() {
+    try {
+      sessionStorage.setItem(
+        SESSION_KEY,
+        JSON.stringify({
+          token: state.token,
+          user: state.user,
+          customerId: state.customerId,
+          pilotStarted: state.pilotStarted,
+          watches: state.watches,
+        })
+      );
+    } catch (e) {
+      /* ignore quota / private mode */
+    }
+  }
+
+  function restoreSession() {
+    try {
+      var raw = sessionStorage.getItem(SESSION_KEY);
+      if (!raw) return false;
+      var data = JSON.parse(raw);
+      if (!data || !data.token || !data.user) return false;
+      state.token = data.token;
+      state.user = data.user;
+      state.customerId = data.customerId || null;
+      state.pilotStarted = !!data.pilotStarted;
+      state.watches = Array.isArray(data.watches) ? data.watches : [];
+      return true;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  function clearSession() {
+    try {
+      sessionStorage.removeItem(SESSION_KEY);
+    } catch (e) {}
+  }
+
+  function updateSoftCapUi() {
+    var atCap = state.watches.length >= FE_WATCH_SOFT_CAP;
+    var msg = $("watchCapMsg");
+    if (atCap) msg.classList.remove("hidden");
+    else msg.classList.add("hidden");
+    // Soft UI only — Add form stays visible; confirm refused at cap
+    if (atCap && state.pilotStarted) {
+      $("confirmBtn").disabled = true;
+    }
+  }
+
+  function renderWatchesList() {
+    var list = $("watchesList");
+    var empty = $("watchesEmpty");
+    if (!state.watches.length) {
+      list.innerHTML = "";
+      empty.classList.remove("hidden");
+      updateSoftCapUi();
+      return;
+    }
+    empty.classList.add("hidden");
+    list.innerHTML = state.watches
+      .map(function (w) {
+        var pills =
+          w.plans && w.plans.length
+            ? w.plans
+                .map(function (c) {
+                  return (
+                    '<span class="baseline-pill">' +
+                    escapeHtml(c.name || c.plan_key || "Plan") +
+                    " · " +
+                    escapeHtml(formatPrice(c.price, c.currency)) +
+                    "</span>"
+                  );
+                })
+                .join("")
+            : '<span class="baseline-pill">Plans from confirm</span>';
+        var checked = w.checkedAt
+          ? formatCheckedAt(new Date(w.checkedAt))
+          : "—";
+        return (
+          '<div class="watch-product" data-watch-key="' +
+          escapeAttr(w.key) +
+          '">' +
+          "<h3>" +
+          escapeHtml(w.rivalName || "Competitor") +
+          "</h3>" +
+          '<p class="watch-url">' +
+          escapeHtml(w.url || "—") +
+          "</p>" +
+          '<div class="quiet-badge">No price change</div>' +
+          '<div class="baseline-plans">' +
+          pills +
+          "</div>" +
+          '<div class="wait-meta">' +
+          "<div><strong>Last checked</strong> · <span>" +
+          escapeHtml(checked) +
+          "</span></div>" +
+          "<div><strong>Cadence</strong> · Daily · morning Israel time</div>" +
+          "</div>" +
+          "</div>"
+        );
+      })
+      .join("");
+    $("resultCard").classList.remove("hidden");
+    updateSoftCapUi();
+  }
+
+  function plansFromPreviewSelection() {
     var candidates =
-      (state.preview && state.preview.candidates) || opts.candidates || [];
+      (state.preview && state.preview.candidates) || [];
     var selectedKeys = state.selected && state.selected.size
       ? Array.from(state.selected)
       : candidates.map(function (c) { return c.plan_key; });
@@ -673,27 +802,76 @@
       return selectedKeys.indexOf(c.plan_key) !== -1;
     });
     if (!shown.length) shown = candidates;
+    return shown.map(function (c) {
+      return {
+        name: c.name || c.plan_key,
+        plan_key: c.plan_key,
+        price: c.price,
+        currency: c.currency,
+      };
+    });
+  }
 
-    var box = $("baselinePlans");
-    if (shown.length) {
-      box.innerHTML = shown
-        .map(function (c) {
-          return (
-            '<span class="baseline-pill">' +
-            escapeHtml(c.name || c.plan_key) +
-            " · " +
-            escapeHtml(formatPrice(c.price, c.currency)) +
-            "</span>"
-          );
-        })
-        .join("");
-    } else {
-      box.innerHTML = '<span class="baseline-pill">Plans from preview</span>';
+  function plansFromWatchTargets(targets) {
+    return (targets || []).map(function (t) {
+      var price = null;
+      var currency = "USD";
+      var name = t.label || t.plan_key || "Plan";
+      var desc = t.target_description || "";
+      // e.g. "Pro plan — USD 20 / month"
+      var m = desc.match(/([A-Z]{3})\s+(\d+(?:\.\d+)?)/i);
+      if (m) {
+        currency = m[1].toUpperCase();
+        price = Number(m[2]);
+      } else if (/free/i.test(desc)) {
+        price = 0;
+      } else if (/custom/i.test(desc)) {
+        price = null;
+      }
+      return { name: name, plan_key: t.plan_key, price: price, currency: currency };
+    });
+  }
+
+  function upsertWatchCard(entry) {
+    var key = entry.key || normalizeWatchUrl(entry.url);
+    entry.key = key;
+    var idx = -1;
+    for (var i = 0; i < state.watches.length; i++) {
+      if (state.watches[i].key === key) {
+        idx = i;
+        break;
+      }
     }
+    if (idx >= 0) {
+      // Merge plans; keep existing card (do not wipe other rivals)
+      var prev = state.watches[idx];
+      var planMap = {};
+      (prev.plans || []).forEach(function (p) {
+        planMap[p.plan_key || p.name] = p;
+      });
+      (entry.plans || []).forEach(function (p) {
+        planMap[p.plan_key || p.name] = p;
+      });
+      prev.plans = Object.keys(planMap).map(function (k) { return planMap[k]; });
+      prev.rivalName = entry.rivalName || prev.rivalName;
+      prev.url = entry.url || prev.url;
+      prev.checkedAt = entry.checkedAt || prev.checkedAt;
+      prev.watchTargetIds = (prev.watchTargetIds || []).concat(entry.watchTargetIds || []);
+    } else {
+      state.watches.push(entry);
+    }
+    renderWatchesList();
+    persistSession();
+  }
 
-    $("quietBadge").textContent = "No price change";
-    $("lastChecked").textContent = formatCheckedAt(opts.checkedAt || new Date());
-    $("resultCard").classList.remove("hidden");
+  function clearAddWatchForm() {
+    $("rivalName").value = "";
+    $("pricingUrl").value = "";
+    $("intentText").value = "";
+    state.preview = null;
+    state.selected = new Set();
+    renderPlans();
+    setStatus($("watchStatus"), "");
   }
 
   async function ensureCustomer() {
@@ -704,13 +882,123 @@
       err.status = 401;
       throw err;
     }
+    // Prefer an existing customer for this user (reload path)
+    var found = await findCustomerForUser();
+    if (found) {
+      state.customerId = found;
+      persistSession();
+      return state.customerId;
+    }
     const rival = ($("rivalName").value || "").trim();
     const name = rival || ($("customerName").value || "Pilot").trim();
     $("customerName").value = name;
     const email = state.user.email || state.user.notify_email;
     const cust = await api("POST", "/customers", { name: name, email: email });
     state.customerId = cust.id;
+    persistSession();
     return state.customerId;
+  }
+
+  async function findCustomerForUser() {
+    if (!state.user) return null;
+    try {
+      var list = await api("GET", "/customers");
+      if (!Array.isArray(list)) return null;
+      var email = (state.user.email || state.user.notify_email || "").toLowerCase();
+      var uid = state.user.id;
+      var mine = list.filter(function (c) {
+        var cem = (c.email || "").toLowerCase();
+        return (email && cem === email) || (uid && c.user_id === uid);
+      });
+      if (!mine.length) return null;
+      // Prefer a customer that already has watches
+      for (var i = mine.length - 1; i >= 0; i--) {
+        var c = mine[i];
+        var n =
+          (c.watch_targets && c.watch_targets.length) ||
+          (c.competitors && c.competitors.length) ||
+          0;
+        if (n > 0) return c.id;
+      }
+      return mine[mine.length - 1].id;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  /**
+   * Reload watches from Service A list API so refresh does not blank the list.
+   * Prefer GET /customers/:id/watch-targets; fall back to GET /customers/:id.
+   * Confirm still creates watches via the intake confirm route — never invent.
+   */
+  async function loadWatchesFromServer() {
+    if (!state.token || !state.user) return;
+    if (!state.customerId) {
+      var found = await findCustomerForUser();
+      if (found) state.customerId = found;
+    }
+    if (!state.customerId) {
+      persistSession();
+      return;
+    }
+    var targets = null;
+    try {
+      targets = await api("GET", "/customers/" + encodeURIComponent(state.customerId) + "/watch-targets");
+    } catch (e) {
+      try {
+        var cust = await api("GET", "/customers/" + encodeURIComponent(state.customerId));
+        targets = cust.watch_targets || null;
+        if (!targets && cust.competitors) {
+          targets = cust.competitors.map(function (c) {
+            return {
+              id: c.id,
+              label: c.name,
+              source_url: c.pricingUrl,
+              target_description: c.targetPriceDescription,
+              plan_key: null,
+              surface: "b2b",
+            };
+          });
+        }
+      } catch (e2) {
+        targets = null;
+      }
+    }
+    if (!Array.isArray(targets) || !targets.length) {
+      persistSession();
+      renderWatchesList();
+      return;
+    }
+    // Group WatchTargets by source_url → one Option B card per rival
+    var byUrl = {};
+    targets.forEach(function (t) {
+      if (t.surface && t.surface !== "b2b") return;
+      var url = t.source_url || t.pricingUrl || "";
+      if (!url) return;
+      var key = normalizeWatchUrl(url);
+      if (!byUrl[key]) {
+        byUrl[key] = {
+          key: key,
+          rivalName: rivalLabelFromUrl(url),
+          url: url,
+          plans: [],
+          checkedAt: t.updated_at || t.created_at || new Date().toISOString(),
+          watchTargetIds: [],
+        };
+      }
+      byUrl[key].watchTargetIds.push(t.id);
+      byUrl[key].plans = byUrl[key].plans.concat(plansFromWatchTargets([t]));
+    });
+    var serverCards = Object.keys(byUrl).map(function (k) { return byUrl[k]; });
+    if (serverCards.length) {
+      // Prefer server list; keep session cards only if server empty for that key was already handled
+      state.watches = serverCards;
+      if (!state.pilotStarted && state.watches.length) {
+        state.pilotStarted = true;
+      }
+    }
+    persistSession();
+    renderWatchesList();
   }
 
   async function doLogin(body) {
@@ -732,7 +1020,8 @@
       }
       state.token = data.token;
       state.user = data.user;
-      state.customerId = null;
+      // Keep customerId/watches if same email session; else reset
+      if (!state.customerId) state.customerId = null;
       updateAuthPanels();
       setStatus($("loginStatus"), "Signed in.", "ok");
       $("resultBox").textContent = JSON.stringify(
@@ -740,9 +1029,14 @@
         null,
         2
       );
+      persistSession();
+      loadWatchesFromServer().catch(function () {});
     } catch (e) {
       state.token = null;
       state.user = null;
+      state.watches = [];
+      state.customerId = null;
+      clearSession();
       updateAuthPanels();
       const code = (e.body && e.body.error) || e.code || "auth_failed";
       const msg =
@@ -770,6 +1064,7 @@
     state.pilotStarted = true;
     setStatus($("checkoutStatus"), "Pilot started.", "ok");
     updateJourneyGates();
+    persistSession();
   });
 
   $("googleLoginBtn").addEventListener("click", function () {
@@ -862,6 +1157,24 @@
       setStatus($("watchStatus"), "Select at least one plan from preview", "warn");
       return;
     }
+    var nextUrl = state.preview.url;
+    var nextKey = normalizeWatchUrl(nextUrl);
+    var already = state.watches.some(function (w) { return w.key === nextKey; });
+    // Soft UI cap: block new rivals at FE_WATCH_SOFT_CAP; existing cards stay
+    if (!already && state.watches.length >= FE_WATCH_SOFT_CAP) {
+      setStatus(
+        $("watchStatus"),
+        "You're full — soft limit of " + FE_WATCH_SOFT_CAP + " watches. Existing watches keep running.",
+        "warn"
+      );
+      showBanner(
+        $("errorBanner"),
+        "You're full — soft limit of " + FE_WATCH_SOFT_CAP + " watches for this pilot. Existing watches keep running.",
+        "warn"
+      );
+      updateSoftCapUi();
+      return;
+    }
     setStatus($("watchStatus"), "Saving watch…");
     $("confirmBtn").disabled = true;
     try {
@@ -875,15 +1188,21 @@
         customer_id: customerId,
       });
       state.lastConfirm = data;
-      setStatus(
-        $("watchStatus"),
-        "Watching " +
-          (($("rivalName").value || "").trim() || rivalLabelFromUrl(state.preview.url)) +
-          ".",
-        "ok"
-      );
+      var rivalName =
+        ($("rivalName").value || "").trim() || rivalLabelFromUrl(state.preview.url);
+      var ids = (data.watch_targets || []).map(function (t) { return t.id; });
+      upsertWatchCard({
+        key: nextKey,
+        rivalName: rivalName,
+        url: state.preview.url,
+        plans: plansFromPreviewSelection(),
+        checkedAt: new Date().toISOString(),
+        watchTargetIds: ids,
+      });
+      setStatus($("watchStatus"), "Watching " + rivalName + ". Add another when ready.", "ok");
       $("resultBox").textContent = JSON.stringify(data, null, 2);
-      renderWatchCard({ checkedAt: new Date() });
+      // Persistent Add — clear inputs / re-enable preview→confirm for the next URL
+      clearAddWatchForm();
     } catch (e) {
       const code = (e.body && e.body.error) || e.code || "confirm_failed";
       const reason = e.body && e.body.reason;
@@ -897,12 +1216,21 @@
       setStatus($("watchStatus"), code + (reason ? " (" + reason + ")" : "") + ": " + msg, "err");
       showBanner($("errorBanner"), msg, "err");
     } finally {
-      $("confirmBtn").disabled = state.selected.size === 0 || !state.token || !state.pilotStarted;
+      updateSoftCapUi();
+      if (state.watches.length < FE_WATCH_SOFT_CAP) {
+        $("confirmBtn").disabled = state.selected.size === 0 || !state.token || !state.pilotStarted;
+      }
     }
   });
 
+  // Boot: restore session so refresh does not blank Your watches; then health
+  restoreSession();
   updateView();
   updateJourneyGates();
+  updateAuthPanels();
+  if (state.token && state.user) {
+    loadWatchesFromServer().catch(function () {});
+  }
   refreshHealth().catch(function () {});
 })();
   </script>
