@@ -102,6 +102,50 @@ through the allowlist gate and Resend transport.
 
 ---
 
+## How cron finds Neon watches (Wave 4 / Hosted watch state)
+
+On the **cloud** path (GitHub Actions), the daily job does **not** read
+`data/customers.json`. That file is lab/local fallback only.
+
+### Flow
+
+1. Workflow `.github/workflows/daily-cron.yml` (schedule `0 3 * * *` UTC,
+   or `workflow_dispatch`) injects `DATABASE_URL` / `DATABASE_URL_NODE`
+   from Actions **secrets** into `bash scripts/render-cron-daily.sh`.
+2. Wrapper runs, in order:
+   - `node scripts/enqueue-daily-ticks.js`
+   - `node scripts/run-monitor-worker.js`
+   - `node scripts/send-outbox.js`
+3. With a DB URL set, enqueue takes the **Neon path**:
+   - `SELECT` from `watch_targets` where `surface = 'b2b'` and
+     `status = 'skill_ready'`
+   - Claims each watch for the current **Asia/Jerusalem** calendar day
+     via `src/neon-ledger.js` into table `daily_ledger`
+   - Idempotent: one row per `(watch_target_id, jerusalem_day)`
+     (`ON CONFLICT DO NOTHING`)
+4. Monitor + mailer drain claimed work and allowlisted outbox as usual.
+
+### Migrations
+
+- Render web start (`scripts/render-start.sh`) runs `node-pg-migrate up`
+  (includes `migrations/5_daily_ledger.js`).
+- The GHA daily job **does not** run migrations. `daily_ledger` must
+  already exist (from a Render start or a manual `npm run migrate:up`).
+- Paid Render `type: cron` remains **CANCELLED** — do not create it.
+
+### Arm / unlock (names only)
+
+- Live runs require Actions **variable** `PRICEWATCH_CRON_ARMED=1`.
+  Until then the job logs `disarmed — skip` and exits green.
+- Keep `PRICEWATCH_M1B_UNLOCK` **unset** until the M1b milestone.
+  Do not flip ARM or unlock from docs alone — founder / Mark only.
+
+### Lab fallback
+
+If neither `DATABASE_URL` nor `DATABASE_URL_NODE` is set, enqueue falls
+back to scanning `data/customers.json` (local pilot only). Cloud GHA
+always injects a DB URL and must stay on the Neon path.
+
 ## Local pilot paths (Boris box — not cloud)
 
 ### Prerequisites

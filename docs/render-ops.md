@@ -19,8 +19,9 @@ not a Render cron service. The public repo qualifies for $0 Actions minutes.
 > Starter plan (~$7/mo) — the founder locked the free path via GitHub
 > Actions instead.
 
-See `docs/cron-pilot.md` for schedule details, arming instructions, and
-the full secrets list.
+See `docs/cron-pilot.md` for schedule details, arming instructions,
+the full secrets list, and **how the GHA job finds Neon B2B watches**
+(Wave 4 — Neon `watch_targets` + `daily_ledger`, not `data/customers.json`).
 
 ---
 
